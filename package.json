@@ -1,6 +1,6 @@
 {
   "name": "123pedidos-electron",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "",
   "main": "main.js",
   "scripts": {
@@ -13,8 +13,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "SEU_USUARIO",
-        "repo": "SEU_REPO"
+        "owner": "isaqueGSG",
+        "repo": "123pedidos-electron"
       }
     ],
     "win": {
