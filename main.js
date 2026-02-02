@@ -1,15 +1,14 @@
 const { app } = require("electron");
 
 const { createMainWindow } = require("./window");
+const { initUpdater } = require("./updater");
+
 require("./ipc/print");
 require("./ipc/whatsapp");
 
 app.whenReady().then(() => {
   createMainWindow();
-
-  // inicializa depois da window existir
-  const { initWhats } = require("./services/whatsapp.service");
-  initWhats();
+  initUpdater();
 });
 
 app.on("window-all-closed", () => {

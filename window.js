@@ -10,14 +10,17 @@ function createMainWindow() {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
-      webSecurity: true
+      sandbox: false
     }
   });
 
-  // win.webContents.openDevTools();
+  // limpa cache antes de carregar
+  win.webContents.session.clearCache().then(() => {
+    win.loadURL("https://123pedidos.web.app/selecionarloja");
+  });
 
-  win.loadURL("https://123pedidos.web.app/selecionarloja");
+  // útil pra debug
+  win.webContents.openDevTools();
 }
 
 module.exports = { createMainWindow };

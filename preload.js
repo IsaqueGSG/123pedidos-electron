@@ -1,8 +1,9 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("electronAPI", {
-  enviarWhats: (telefone, texto) =>
-    ipcRenderer.invoke("whats-send", { telefone, texto }),
+
+  enviarWhats: (idLoja, telefone, texto) =>
+    ipcRenderer.invoke("whats-send", { idLoja, telefone, texto }),
 
   printHTML: (html) =>
     ipcRenderer.invoke("print-html", html),
@@ -17,6 +18,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
     const handler = (_, data) => callback(data);
     ipcRenderer.on("whats-status", handler);
     return () => ipcRenderer.removeListener("whats-status", handler);
-  }
+  },
+
+  initWhats: (idLoja) =>
+    ipcRenderer.invoke("whats-init", idLoja),
 
 });

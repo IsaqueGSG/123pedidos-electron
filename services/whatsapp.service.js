@@ -2,56 +2,61 @@ const { Client, LocalAuth } = require("whatsapp-web.js");
 const QRCode = require("qrcode");
 const { BrowserWindow } = require("electron");
 
-const waClient = new Client({
-  authStrategy: new LocalAuth({
-    dataPath: "whatsapp-session"
-  }),
-  puppeteer: {
-    headless: true
-  }
-});
+const clients = new Map(); // cache de sessões
 
 function enviarParaRenderer(channel, payload) {
   const win = BrowserWindow.getAllWindows()[0];
-  if (win) {
-    win.webContents.send(channel, payload);
-  }
+  if (win) win.webContents.send(channel, payload);
 }
 
-waClient.on("qr", async (qr) => {
-  console.log("QR recebido");
+function getClient(idLoja) {
+  if (clients.has(idLoja)) {
+    return clients.get(idLoja);
+  }
 
-  const qrBase64 = await QRCode.toDataURL(qr);
+  const client = new Client({
+    authStrategy: new LocalAuth({
+      clientId: idLoja,                 // 🔥 chave da loja
+      dataPath: "whatsapp-session"
+    }),
+    puppeteer: { headless: true }
+  });
 
-  enviarParaRenderer("whats-qr", qrBase64);
-});
+  client.on("qr", async (qr) => {
+    const qrBase64 = await QRCode.toDataURL(qr);
+    enviarParaRenderer("whats-qr", { idLoja, qr: qrBase64 });
+  });
 
-waClient.on("ready", () => {
-  enviarParaRenderer("whats-status", "ready");
-});
+  client.on("ready", () => {
+    enviarParaRenderer("whats-status", { idLoja, status: "ready" });
+  });
 
-waClient.on("authenticated", () => {
-  enviarParaRenderer("whats-status", "authenticated");
-});
+  client.on("authenticated", () => {
+    enviarParaRenderer("whats-status", { idLoja, status: "authenticated" });
+  });
 
-waClient.on("disconnected", () => {
-  enviarParaRenderer("whats-status", "disconnected");
-});
+  client.on("disconnected", () => {
+    enviarParaRenderer("whats-status", { idLoja, status: "disconnected" });
+  });
 
-waClient.initialize();
+  client.initialize();
 
-async function enviarWhats(telefone, texto) {
+  clients.set(idLoja, client);
+
+  return client;
+}
+
+async function enviarWhats(idLoja, telefone, texto) {
   try {
+    const client = getClient(idLoja);
+
     const numero = "55" + telefone.replace(/\D/g, "") + "@c.us";
-    await waClient.sendMessage(numero, texto);
+    await client.sendMessage(numero, texto);
+
     return { ok: true };
   } catch (err) {
     return { ok: false, erro: err.message };
   }
 }
 
-function initWhats() {
-  waClient.initialize();
-}
-
-module.exports = { enviarWhats, initWhats };
+module.exports = { enviarWhats, getClient };
