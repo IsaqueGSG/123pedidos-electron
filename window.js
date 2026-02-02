@@ -20,7 +20,7 @@ function createMainWindow() {
   });
 
   // útil pra debug
-  win.webContents.openDevTools();
+  // win.webContents.openDevTools();
 }
 
 module.exports = { createMainWindow };
