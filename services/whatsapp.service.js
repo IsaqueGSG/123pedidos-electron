@@ -1,6 +1,8 @@
 const { Client, LocalAuth } = require("whatsapp-web.js");
 const QRCode = require("qrcode");
-const { BrowserWindow } = require("electron");
+const { BrowserWindow, app } = require("electron");
+const path = require("path");
+const fs = require("fs");
 
 const clients = new Map();
 const clientState = new Map();
@@ -10,34 +12,42 @@ function log(id, ...msg) {
 }
 
 function enviarParaRenderer(channel, payload) {
-  const win = BrowserWindow.getAllWindows()[0];
-  if (!win) {
-    console.warn("[WHATS] Nenhuma janela para enviar evento:", channel);
-    return;
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send(channel, payload);
+  }
+}
+
+function getSessionPath() {
+  if (!app.isReady()) {
+    throw new Error("Electron ainda não está ready");
   }
 
-  win.webContents.send(channel, payload);
+  const dir = path.join(app.getPath("userData"), "whatsapp-session");
+
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  return dir;
 }
 
 function getClient(idLoja) {
   if (!idLoja) throw new Error("idLoja não informado");
 
   if (clients.has(idLoja)) {
-    log(idLoja, "Cliente já existe — reutilizando sessão");
+    log(idLoja, "Reutilizando client existente");
     return clients.get(idLoja);
   }
 
-  log(idLoja, "Criando novo client");
+  log(idLoja, "Criando client");
 
-  enviarParaRenderer("whats-status", {
-    idLoja,
-    status: "starting"
-  });
+  enviarParaRenderer("whats-status", { idLoja, status: "starting" });
+  clientState.set(idLoja, "starting");
 
   const client = new Client({
     authStrategy: new LocalAuth({
       clientId: idLoja,
-      dataPath: "whatsapp-session"
+      dataPath: getSessionPath()
     }),
     puppeteer: {
       headless: true,
@@ -50,68 +60,47 @@ function getClient(idLoja) {
 
     const qrBase64 = await QRCode.toDataURL(qr);
 
-    enviarParaRenderer("whats-qr", {
-      idLoja,
-      qr: qrBase64
-    });
+    clientState.set(idLoja, "qr");
 
-    enviarParaRenderer("whats-status", {
-      idLoja,
-      status: "qr"
-    });
-  });
-
-  client.on("ready", () => {
-    log(idLoja, "READY");
-    enviarParaRenderer("whats-status", {
-      idLoja,
-      status: "ready"
-    });
+    enviarParaRenderer("whats-qr", { idLoja, qr: qrBase64 });
+    enviarParaRenderer("whats-status", { idLoja, status: "qr" });
   });
 
   client.on("authenticated", () => {
     log(idLoja, "AUTHENTICATED");
-    enviarParaRenderer("whats-status", {
-      idLoja,
-      status: "authenticated"
-    });
+    clientState.set(idLoja, "authenticated");
+    enviarParaRenderer("whats-status", { idLoja, status: "authenticated" });
+  });
+
+  client.on("ready", () => {
+    log(idLoja, "READY");
+    clientState.set(idLoja, "ready");
+    enviarParaRenderer("whats-status", { idLoja, status: "ready" });
   });
 
   client.on("disconnected", (reason) => {
     log(idLoja, "DISCONNECTED:", reason);
-
-    enviarParaRenderer("whats-status", {
-      idLoja,
-      status: "disconnected"
-    });
-
+    clientState.set(idLoja, "disconnected");
+    enviarParaRenderer("whats-status", { idLoja, status: "disconnected" });
     clients.delete(idLoja);
+    setTimeout(() => {
+      getClient(idLoja);
+    }, 3000);
   });
 
   client.on("auth_failure", (msg) => {
     log(idLoja, "AUTH FAILURE:", msg);
   });
 
-  client.on("change_state", (state) => {
-    log(idLoja, "STATE:", state);
-  });
-
-  client.on("loading_screen", (percent, message) => {
-    log(idLoja, `LOADING ${percent}%`, message);
+  client.on("loading_screen", (p, m) => {
+    log(idLoja, `LOADING ${p}%`, m);
   });
 
   client.on("error", (err) => {
     log(idLoja, "ERROR:", err);
   });
 
-  try {
-    client.initialize();
-    log(idLoja, "initialize() chamado");
-  } catch (err) {
-    log(idLoja, "Erro ao inicializar:", err);
-    throw err;
-  }
-
+  client.initialize();
   clients.set(idLoja, client);
 
   return client;
@@ -119,15 +108,17 @@ function getClient(idLoja) {
 
 async function enviarWhats(idLoja, telefone, texto) {
   try {
-    log(idLoja, "Enviando mensagem →", telefone);
-
     const client = getClient(idLoja);
+
+    const st = clientState.get(idLoja);
+
+    if (st !== "ready" && st !== "authenticated") {
+      return { ok: false, erro: "WhatsApp não está pronto" };
+    }
 
     const numero = "55" + telefone.replace(/\D/g, "") + "@c.us";
 
     await client.sendMessage(numero, texto);
-
-    log(idLoja, "Mensagem enviada OK");
 
     return { ok: true };
   } catch (err) {
@@ -136,4 +127,9 @@ async function enviarWhats(idLoja, telefone, texto) {
   }
 }
 
-module.exports = { enviarWhats, getClient };
+module.exports = {
+  enviarWhats,
+  getClient,
+  clients,
+  clientState
+};
