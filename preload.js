@@ -20,7 +20,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return () => ipcRenderer.removeListener("whats-status", handler);
   },
 
-  initWhats: (idLoja) =>
-    ipcRenderer.invoke("whats-init", idLoja),
+  initWhats: (idLoja) => {
+    console.log("[PRELOAD] initWhats", idLoja);
+    return ipcRenderer.invoke("whats-init", idLoja);
+  },
+
 
 });

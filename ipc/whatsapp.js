@@ -1,7 +1,9 @@
 const { ipcMain } = require("electron");
-const { enviarWhats } = require("../services/whatsapp.service");
+const { enviarWhats, getClient } = require("../services/whatsapp.service");
 
 ipcMain.handle("whats-send", async (_, payload) => {
+  console.log("[IPC] whats-send", payload.idLoja, payload.telefone);
+
   return enviarWhats(
     payload.idLoja,
     payload.telefone,
@@ -9,9 +11,16 @@ ipcMain.handle("whats-send", async (_, payload) => {
   );
 });
 
-const { getClient } = require("../services/whatsapp.service");
+ipcMain.handle("whats-init", async (_, idLoja) => {
+  console.log("[IPC] whats-init:", idLoja);
 
-ipcMain.handle("whats-init", (_, idLoja) => {
-  getClient(idLoja);
+  try {
+    getClient(idLoja);
+    return { ok: true };
+  } catch (err) {
+    console.error("[IPC] whats-init erro:", err);
+    return { ok: false, erro: err.message };
+  }
 });
+
 
