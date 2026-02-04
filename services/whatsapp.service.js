@@ -69,7 +69,6 @@ function getClient(idLoja) {
     }
   });
 
-
   client.on("qr", async (qr) => {
     log(idLoja, "QR recebido");
 
@@ -118,13 +117,13 @@ function getClient(idLoja) {
   client.initialize();
   clients.set(idLoja, client);
 
+
+  client.on("browser_disconnected", () => {
+    log(idLoja, "Browser disconnected");
+  });
+
   return client;
 }
-
-client.on("browser_disconnected", () => {
-  log(idLoja, "Browser disconnected");
-});
-
 
 async function enviarWhats(idLoja, telefone, texto) {
   try {
