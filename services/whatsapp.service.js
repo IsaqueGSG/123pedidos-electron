@@ -8,8 +8,15 @@ const clients = new Map();
 const clientState = new Map();
 
 function log(id, ...msg) {
-  console.log(`[WHATS ${id}]`, ...msg);
+  console.log(`[WHATS ${id}]`, ...msg); // aparece no terminal do PC
+
+  // envia para a janela ativa
+  const win = BrowserWindow.getFocusedWindow();
+  if (win) {
+    win.webContents.send('log-message', { id, msg });
+  }
 }
+
 
 function enviarParaRenderer(channel, payload) {
   for (const win of BrowserWindow.getAllWindows()) {

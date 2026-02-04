@@ -21,3 +21,4 @@ ipcMain.handle("whats-send", (_, payload) => {
 ipcMain.handle("whats-status", (_, idLoja) => {
   return clientState.get(idLoja) || "disconnected";
 });
+

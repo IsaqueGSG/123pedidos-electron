@@ -24,6 +24,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
     const h = (_, d) => cb(d);
     ipcRenderer.on("whats-status", h);
     return () => ipcRenderer.removeListener("whats-status", h);
+  },
+
+  onLogMessage: (callback) => {
+    ipcRenderer.on("log-message", (event, data) => {
+      callback(data);
+    });
   }
+
 });
 
