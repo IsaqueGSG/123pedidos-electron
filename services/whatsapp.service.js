@@ -1,4 +1,5 @@
 const { Client, LocalAuth } = require("whatsapp-web.js");
+const puppeteer = require("puppeteer");
 const QRCode = require("qrcode");
 const { BrowserWindow, app } = require("electron");
 const path = require("path");
@@ -58,9 +59,16 @@ function getClient(idLoja) {
     }),
     puppeteer: {
       headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"]
+      executablePath: puppeteer.executablePath(),
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu"
+      ]
     }
   });
+
 
   client.on("qr", async (qr) => {
     log(idLoja, "QR recebido");
@@ -112,6 +120,11 @@ function getClient(idLoja) {
 
   return client;
 }
+
+client.on("browser_disconnected", () => {
+  log(idLoja, "Browser disconnected");
+});
+
 
 async function enviarWhats(idLoja, telefone, texto) {
   try {
