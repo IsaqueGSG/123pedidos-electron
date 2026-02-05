@@ -1,202 +1,237 @@
-const { Client, LocalAuth } = require("whatsapp-web.js");
-const puppeteer = require("puppeteer");
+const {
+  makeWASocket,
+  useMultiFileAuthState,
+  DisconnectReason,
+  fetchLatestBaileysVersion
+} = require("@whiskeysockets/baileys");
 const QRCode = require("qrcode");
 
 const { BrowserWindow, app } = require("electron");
+const P = require("pino");
 const path = require("path");
 const fs = require("fs");
 
-const clients = new Map();
-const clientState = new Map();
+const sockets = new Map();
+const statusMap = new Map();
+const filas = new Map();
 
-function log(id, ...msg) {
-  console.log(`[WHATS ${id}]`, ...msg);
-  enviarParaRenderer("log-message", { id, msg });
-}
 
-function enviarParaRenderer(channel, payload) {
+// ------------------------
+function enviarRenderer(channel, payload) {
   for (const win of BrowserWindow.getAllWindows()) {
     win.webContents.send(channel, payload);
   }
 }
 
-function getSessionPath() {
-  if (!app.isReady()) throw new Error("Electron ainda não está ready");
+function log(id, ...msg) {
+  console.log(`[BAILEYS ${id}]`, ...msg);
+  enviarRenderer("log-message", { id, msg });
+}
 
-  const dir = path.join(app.getPath("userData"), "whatsapp-session");
+
+// ------------------------
+function getAuthDir(idLoja) {
+  const dir = path.join(app.getPath("userData"), "baileys", idLoja);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
   return dir;
 }
 
-function getPuppeteerChrome() {
-  try {
-    const p = puppeteer.executablePath();
-    console.log("Chromium path:", p);
-    return p;
-  } catch (e) {
-    console.warn("Chromium não disponível:", e.message);
-    return undefined;
-  }
+
+// ------------------------
+async function criarSocket(idLoja) {
+  log(idLoja, "Criando socket Baileys");
+
+  const { state, saveCreds } = await useMultiFileAuthState(getAuthDir(idLoja));
+  const { version } = await fetchLatestBaileysVersion();
+
+  const sock = makeWASocket({
+    version,
+    auth: state,
+
+    logger: P({ level: "silent" }),
+
+    // fingerprint menos “bot”
+    browser: ["Chrome", "Desktop", "123pedidos"],
+
+    markOnlineOnConnect: false,
+    syncFullHistory: false
+  });
+
+  sock.ev.on("creds.update", saveCreds);
+
+  attachEvents(sock, idLoja);
+
+  sockets.set(idLoja, sock);
+  statusMap.set(idLoja, "connecting");
+  enviarRenderer("whats-status", { idLoja, status: "starting" });
+
+
+  return sock;
 }
 
 
-function buildPuppeteerConfig(useEmbedded = true) {
-  const config = {
-    headless: true,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu",
-      "--disable-features=site-per-process"
-    ]
-  };
+// ------------------------
+function attachEvents(sock, idLoja) {
 
-  if (useEmbedded) {
-    const p = getPuppeteerChrome();
-    if (p) config.executablePath = p;
-  }
+  sock.ev.on("connection.update", async (update) => {
+    const { connection, qr, lastDisconnect } = update;
 
-  return config;
-}
-
-function createClient(idLoja, useEmbedded) {
-  log(idLoja, "Criando client — embedded:", useEmbedded);
-
-  return new Client({
-    authStrategy: new LocalAuth({
-      clientId: idLoja,
-      dataPath: getSessionPath()
-    }),
-    puppeteer: buildPuppeteerConfig(useEmbedded)
-  });
-}
-
-function attachEvents(client, idLoja) {
-  client.on("qr", async (qr) => {
-    log(idLoja, "QR recebido");
-    const qrBase64 = await QRCode.toDataURL(qr);
-
-    clientState.set(idLoja, "qr");
-    enviarParaRenderer("whats-qr", { idLoja, qr: qrBase64 });
-    enviarParaRenderer("whats-status", { idLoja, status: "qr" });
-  });
-
-  client.on("authenticated", () => {
-    log(idLoja, "AUTHENTICATED");
-    clientState.set(idLoja, "authenticated");
-    enviarParaRenderer("whats-status", { idLoja, status: "authenticated" });
-  });
-
-  client.on("ready", () => {
-    log(idLoja, "READY");
-    clientState.set(idLoja, "ready");
-    enviarParaRenderer("whats-status", { idLoja, status: "ready" });
-  });
-
-  client.on("disconnected", async (reason) => {
-    log(idLoja, "DISCONNECTED:", reason);
-
-    clientState.set(idLoja, "disconnected");
-    enviarParaRenderer("whats-status", { idLoja, status: "disconnected" });
-
-    try { await client.destroy(); } catch { }
-
-    clients.delete(idLoja);
-
-    setTimeout(() => {
-      if (!clients.has(idLoja)) getClient(idLoja);
-    }, 3000);
-  });
-
-  client.on("auth_failure", (msg) => {
-    log(idLoja, "AUTH FAILURE:", msg);
-  });
-
-  client.on("loading_screen", (p, m) => {
-    log(idLoja, `LOADING ${p}%`, m);
-  });
-
-  client.on("error", (err) => {
-    log(idLoja, "ERROR:", err.message);
-  });
-
-  client.on("browser_disconnected", () => {
-    log(idLoja, "Browser disconnected");
-  });
-}
-
-function initializeWithFallback(idLoja) {
-  let client = createClient(idLoja, true);
-  attachEvents(client, idLoja);
-
-  clients.set(idLoja, client);
-
-  client.initialize({ timeout: 60000 })
-    .catch(async (err) => {
-      log(idLoja, "INIT ERROR embedded:", err.message);
-
-      if (
-        err.message.includes("spawn") ||
-        err.message.includes("EPERM") ||
-        err.message.includes("Chrome")
-      ) {
-        log(idLoja, "Fallback automático → Chrome/Edge do sistema");
-
-        try { await client.destroy(); } catch { }
-
-        client = createClient(idLoja, false);
-        attachEvents(client, idLoja);
-
-        clients.set(idLoja, client);
-
-        client.initialize().catch(err2 => {
-          log(idLoja, "INIT ERROR fallback:", err2.message);
-        });
+    if (qr) {
+      let qrImg = null;
+      try {
+        qrImg = await QRCode.toDataURL(qr);
+      } catch (e) {
+        log(idLoja, "Erro gerar QR:", e.message);
+        return;
       }
-    });
-}
 
-function getClient(idLoja) {
-  if (!idLoja) throw new Error("idLoja não informado");
+      enviarRenderer("whats-qr", {
+        idLoja,
+        qr: qrImg
+      });
 
-  if (clients.has(idLoja)) {
-    log(idLoja, "Reutilizando client existente");
-    return clients.get(idLoja);
-  }
-
-  enviarParaRenderer("whats-status", { idLoja, status: "starting" });
-  clientState.set(idLoja, "starting");
-
-  initializeWithFallback(idLoja);
-
-  return clients.get(idLoja);
-}
-
-async function enviarWhats(idLoja, telefone, texto) {
-  try {
-    const client = getClient(idLoja);
-
-    const st = clientState.get(idLoja);
-    if (st !== "ready" && st !== "authenticated") {
-      return { ok: false, erro: "WhatsApp não está pronto" };
+      statusMap.set(idLoja, "qr");
+      enviarRenderer("whats-status", { idLoja, status: "qr" });
     }
 
-    const numero = "55" + telefone.replace(/\D/g, "") + "@c.us";
+    if (connection === "open") {
+      log(idLoja, "READY");
+      statusMap.set(idLoja, "ready");
+      enviarRenderer("whats-status", { idLoja, status: "ready" });
+      processarFila(idLoja);
+    }
 
-    await client.sendMessage(numero, texto);
-    return { ok: true };
+    if (connection === "close") {
+      const code = lastDisconnect?.error?.output?.statusCode;
 
-  } catch (err) {
-    log(idLoja, "Erro enviar:", err.message);
-    return { ok: false, erro: err.message };
-  }
+      const shouldReconnect =
+        code !== DisconnectReason.loggedOut;
+
+      log(idLoja, "CLOSE:", code, "reconnect:", shouldReconnect);
+
+      statusMap.set(idLoja, "disconnected");
+      enviarRenderer("whats-status", { idLoja, status: "disconnected" });
+
+      sockets.delete(idLoja);
+
+      if (shouldReconnect) {
+        setTimeout(() => getSocket(idLoja), 4000);
+      }
+    }
+  });
 }
 
+
+// ------------------------
+const creating = new Map();
+
+async function getSocket(idLoja) {
+  if (sockets.has(idLoja)) return sockets.get(idLoja);
+
+  if (!creating.has(idLoja)) {
+    creating.set(idLoja, criarSocket(idLoja).finally(() => {
+      creating.delete(idLoja);
+    }));
+  }
+
+  return creating.get(idLoja);
+}
+
+// =========================================================
+/*
+   ENVIO HUMANIZADO
+*/
+// =========================================================
+
+function delay(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+function randomRange(min, max) {
+  return Math.floor(Math.random() * (max - min)) + min;
+}
+
+
+// simular digitando
+async function simularDigitando(sock, jid, texto) {
+  const tempo = Math.min(5000, texto.length * randomRange(60, 120));
+
+  await sock.sendPresenceUpdate("composing", jid);
+  await delay(tempo);
+  await sock.sendPresenceUpdate("paused", jid);
+}
+
+
+// fila por loja
+function enqueue(idLoja, job) {
+  if (!filas.has(idLoja)) {
+    filas.set(idLoja, {
+      jobs: [],
+      processing: false
+    });
+  }
+
+  filas.get(idLoja).jobs.push(job);
+}
+
+// processador de fila
+async function processarFila(idLoja) {
+  const fila = filas.get(idLoja);
+  if (!fila || fila.processing) return;
+
+  fila.processing = true;
+
+  while (fila.jobs.length > 0) {
+    const job = fila.jobs.shift();
+    try {
+      await job();
+    } catch (e) {
+      log(idLoja, "Erro job:", e.message);
+    }
+
+    await delay(randomRange(4000, 9000));
+  }
+
+  fila.processing = false;
+}
+
+
+
+// ------------------------
+async function enviarWhats(idLoja, telefone, texto) {
+
+  enqueue(idLoja, async () => {
+
+    const sock = await getSocket(idLoja);
+
+    if (statusMap.get(idLoja) !== "ready") {
+      log(idLoja, "Socket não pronto");
+      return;
+    }
+
+    const numero = telefone.replace(/\D/g, "");
+    const jid = `55${numero}@s.whatsapp.net`;
+
+    // delay inicial humano
+    await delay(randomRange(2000, 6000));
+
+    // digitando
+    await simularDigitando(sock, jid, texto);
+
+    await sock.sendMessage(jid, { text: texto });
+
+    log(idLoja, "Mensagem enviada:", jid);
+  });
+
+  processarFila(idLoja);
+
+  return { ok: true };
+}
+
+
+// ------------------------
 module.exports = {
+  getSocket,
   enviarWhats,
-  getClient,
-  clients,
-  clientState
+  statusMap
 };

@@ -1,24 +1,18 @@
 const { ipcMain } = require("electron");
-const {
-  enviarWhats,
-  getClient,
-  clientState
-} = require("../services/whatsapp.service");
+const { enviarWhats, getSocket, statusMap } = require("../services/whatsapp.service");
 
-ipcMain.handle("whats-init", (_, idLoja) => {
-  getClient(idLoja);
-  return { ok: true };
+// INIT
+ipcMain.handle("whats-init", async (_, idLoja) => {
+  await getSocket(idLoja);
+  return true;
 });
 
-ipcMain.handle("whats-send", (_, payload) => {
-  return enviarWhats(
-    payload.idLoja,
-    payload.telefone,
-    payload.texto
-  );
-});
-
+// STATUS
 ipcMain.handle("whats-status", (_, idLoja) => {
-  return clientState.get(idLoja) || "disconnected";
+  return statusMap.get(idLoja) || "disconnected";
 });
 
+// SEND
+ipcMain.handle("whats-send", (_, payload) => {
+  return enviarWhats(payload.idLoja, payload.telefone, payload.texto);
+});
