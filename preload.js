@@ -30,7 +30,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("log-message", (event, data) => {
       callback(data);
     });
-  }
+  },
+
+  listPrinters: () =>
+    ipcRenderer.invoke("printer-list"),
+
+  setPrinter: (nome) =>
+    ipcRenderer.invoke("printer-set", nome),
+
+  getPrinter: () =>
+    ipcRenderer.invoke("printer-get")
 
 });
 

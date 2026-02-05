@@ -1,5 +1,7 @@
 const { BrowserWindow } = require("electron");
 
+const { getImpressoraSalva } = require("./printerConfig.service");
+
 async function imprimirHTMLSilencioso(html) {
   console.log("🧾 [PRINT] Pedido recebido");
 
@@ -83,7 +85,12 @@ async function imprimirHTMLSilencioso(html) {
       return false;
     }
 
-    const printer = printers.find(p => p.isDefault) || printers[0];
+    const salva = getImpressoraSalva();
+
+    const printer =
+      printers.find(p => p.name === salva) ||
+      printers.find(p => p.isDefault) ||
+      printers[0];
 
     console.log("🧾 [PRINT] usando impressora:", printer.name);
 
