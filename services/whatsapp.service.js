@@ -65,7 +65,6 @@ async function criarSocket(idLoja) {
   statusMap.set(idLoja, "connecting");
   enviarRenderer("whats-status", { idLoja, status: "starting" });
 
-
   return sock;
 }
 
@@ -104,17 +103,27 @@ function attachEvents(sock, idLoja) {
     if (connection === "close") {
       const code = lastDisconnect?.error?.output?.statusCode;
 
-      const shouldReconnect =
-        code !== DisconnectReason.loggedOut;
+      // Se o usuário deslogou manualmente pelo celular
+      const isLoggedOut = code === DisconnectReason.loggedOut;
 
-      log(idLoja, "CLOSE:", code, "reconnect:", shouldReconnect);
+      log(idLoja, "Conexão fechada. Motivo:", code);
 
       statusMap.set(idLoja, "disconnected");
       enviarRenderer("whats-status", { idLoja, status: "disconnected" });
 
       sockets.delete(idLoja);
 
-      if (shouldReconnect) {
+      if (isLoggedOut) {
+        log(idLoja, "Usuário deslogou. Limpando sessão...");
+        const dir = getAuthDir(idLoja);
+        // Remove a pasta de credenciais para forçar novo QR no próximo init
+        if (fs.existsSync(dir)) {
+          fs.rmSync(dir, { recursive: true, force: true });
+        }
+      }
+
+      // Reconecta automaticamente se não foi um log out manual
+      if (!isLoggedOut) {
         setTimeout(() => getSocket(idLoja), 4000);
       }
     }

@@ -2,8 +2,11 @@ const { BrowserWindow } = require("electron");
 
 const { getImpressoraSalva } = require("./printerConfig.service");
 
-async function imprimirHTMLSilencioso(html) {
+
+async function imprimirHTMLSilencioso(html, larguraRaw = "80mm") {
   console.log("🧾 [PRINT] Pedido recebido");
+
+  const larguraMicrons = parseInt(larguraRaw) * 1000;
 
   // ✅ garante CSS de impressão correto
   const htmlFinal = `
@@ -46,25 +49,22 @@ async function imprimirHTMLSilencioso(html) {
     console.log("❌ [PRINT] fail-load", code, desc);
   });
 
-  // ✅ carrega página vazia
-  await printWin.loadURL("about:blank");
+  // ✅ em vez de about:blank + document.write
+  const dataUrl =
+    "data:text/html;charset=utf-8," +
+    encodeURIComponent(htmlFinal);
 
-  console.log("🧾 [PRINT] escrevendo HTML");
+  await printWin.loadURL(dataUrl);
 
-  // ✅ escreve HTML completo
+  // ✅ espera render real
   await printWin.webContents.executeJavaScript(`
-    document.open();
-    document.write(\`${htmlFinal.replace(/`/g, "\\`")}\`);
-    document.close();
-  `);
+  new Promise(resolve => {
+    if (document.readyState === "complete") resolve();
+    else window.onload = resolve;
+  });
+`);
 
-  // ✅ ESPERA O DOM + LAYOUT TERMINAR (correção principal)
-  await printWin.webContents.executeJavaScript(`
-    new Promise(resolve => {
-      if (document.readyState === "complete") resolve();
-      else window.onload = resolve;
-    });
-  `);
+  await new Promise(r => setTimeout(r, 500));
 
   try {
     console.log("🧾 [PRINT] buscando impressoras...");
@@ -100,7 +100,14 @@ async function imprimirHTMLSilencioso(html) {
           silent: true,
           printBackground: true,
           deviceName: printer.name,
-          scaleFactor: 100
+          scaleFactor: 100,
+          pageSize: {
+            width: larguraMicrons,
+            height: 300000 // Altura grande para não cortar comandas longas
+          },
+          margins: {
+            marginType: "none"
+          }
         },
         (success, err) => {
           console.log("🧾 [PRINT] resultado:", success, err);
@@ -116,5 +123,6 @@ async function imprimirHTMLSilencioso(html) {
     return false;
   }
 }
+
 
 module.exports = { imprimirHTMLSilencioso };

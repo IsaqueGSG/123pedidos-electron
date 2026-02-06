@@ -3,6 +3,7 @@ const { enviarWhats, getSocket, statusMap } = require("../services/whatsapp.serv
 
 // INIT
 ipcMain.handle("whats-init", async (_, idLoja) => {
+  statusMap.set(idLoja, "starting"); 
   await getSocket(idLoja);
   return true;
 });
