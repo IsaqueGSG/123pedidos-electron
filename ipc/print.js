@@ -1,8 +1,16 @@
 const { ipcMain } = require("electron");
 const { imprimirHTMLSilencioso } = require("../services/print.service");
 
-ipcMain.handle("print-html", async (_, { html, largura }) => {
-  console.log(`🧾 [IPC] Impressão solicitada para largura: ${largura}`);
-  return imprimirHTMLSilencioso(html, largura);
+ipcMain.handle("imprimir-pedido", async (_, html, estilos, largura) => {
+  try {
+    const resultado = await imprimirHTMLSilencioso(html, estilos, Number(largura));
+    return resultado;
+  } catch (error) {
+    console.error('Erro na impressão:', error);
+    return {
+      success: false,
+      error: error.message,
+      larguraUtilizada: largura
+    };
+  }
 });
-

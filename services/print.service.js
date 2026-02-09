@@ -1,27 +1,41 @@
-const { BrowserWindow } = require("electron");
-
+const { BrowserWindow, app } = require("electron");
+const fs = require("fs");
+const path = require("path");
 const { getImpressoraSalva } = require("./printerConfig.service");
 
+// Função para obter o diretório solicitado
+function getAuthDir() {
+  const dir = path.join(app.getPath("userData"), "impressao");
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
 
-async function imprimirHTMLSilencioso(html, larguraRaw = "80mm") {
-  console.log("🧾 [PRINT] Pedido recebido");
+async function imprimirHTMLSilencioso(html, estilos, larguraMM = 80) {
+  let win = null;
 
-  const larguraMicrons = parseInt(larguraRaw) * 1000;
+  // Validação da largura - CORREÇÃO AQUI
+  if (![80, 58].includes(larguraMM)) {
+    console.warn(`⚠️ Largura inválida: "${larguraMM}mm". Usando padrão 80mm.`);
+    larguraMM = 80;
+  }
 
-  // ✅ garante CSS de impressão correto
+  // Converter mm para microns (1mm = 1000 microns)
+  const larguraMicrons = larguraMM * 1000;
+  // Altura fixa ou calcular baseado no conteúdo
+  const alturaMicrons = 297000; // 297mm (tamanho A4) - ajuste conforme necessário
+
+  const printerName = getImpressoraSalva();
+  const storageDir = getAuthDir();
+  const filePath = path.join(storageDir, `pedido_${Date.now()}.html`);
+
+  // Montagem do HTML Final
   const htmlFinal = `
+    <!DOCTYPE html>
     <html>
       <head>
         <meta charset="UTF-8">
-        <style>
-          @page {
-            size: auto;
-            margin: 0;
-          }
-          body {
-            margin: 0;
-          }
-        </style>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        ${estilos}
       </head>
       <body>
         ${html}
@@ -29,100 +43,105 @@ async function imprimirHTMLSilencioso(html, larguraRaw = "80mm") {
     </html>
   `;
 
-  const printWin = new BrowserWindow({
+  // Salva o arquivo
+  fs.writeFileSync(filePath, htmlFinal, { encoding: "utf8" });
+
+  win = new BrowserWindow({
     show: false,
     webPreferences: {
-      sandbox: false,
-      contextIsolation: true
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true
     }
   });
-
-  printWin.webContents.on("did-finish-load", () => {
-    console.log("🧾 [PRINT] did-finish-load");
-  });
-
-  printWin.webContents.on("dom-ready", () => {
-    console.log("🧾 [PRINT] dom-ready");
-  });
-
-  printWin.webContents.on("did-fail-load", (_, code, desc) => {
-    console.log("❌ [PRINT] fail-load", code, desc);
-  });
-
-  // ✅ em vez de about:blank + document.write
-  const dataUrl =
-    "data:text/html;charset=utf-8," +
-    encodeURIComponent(htmlFinal);
-
-  await printWin.loadURL(dataUrl);
-
-  // ✅ espera render real
-  await printWin.webContents.executeJavaScript(`
-  new Promise(resolve => {
-    if (document.readyState === "complete") resolve();
-    else window.onload = resolve;
-  });
-`);
-
-  await new Promise(r => setTimeout(r, 500));
 
   try {
-    console.log("🧾 [PRINT] buscando impressoras...");
+    await win.loadFile(filePath);
 
-    const printers = await printWin.webContents.getPrintersAsync();
-
-    console.log(
-      "🧾 [PRINT] impressoras encontradas:",
-      printers.map(p => ({
-        name: p.name,
-        isDefault: p.isDefault
-      }))
-    );
-
-    if (!printers.length) {
-      console.log("❌ [PRINT] nenhuma impressora encontrada");
-      printWin.close();
-      return false;
-    }
-
-    const salva = getImpressoraSalva();
-
-    const printer =
-      printers.find(p => p.name === salva) ||
-      printers.find(p => p.isDefault) ||
-      printers[0];
-
-    console.log("🧾 [PRINT] usando impressora:", printer.name);
-
-    return await new Promise((resolve) => {
-      printWin.webContents.print(
-        {
-          silent: true,
-          printBackground: true,
-          deviceName: printer.name,
-          scaleFactor: 100,
-          pageSize: {
-            width: larguraMicrons,
-            height: 300000 // Altura grande para não cortar comandas longas
-          },
-          margins: {
-            marginType: "none"
-          }
-        },
-        (success, err) => {
-          console.log("🧾 [PRINT] resultado:", success, err);
-          printWin.close();
-          resolve(success);
+    // Aguarda o carregamento
+    await win.webContents.executeJavaScript(`
+      new Promise(resolve => {
+        if (document.readyState === "complete") {
+          setTimeout(resolve, 100);
+        } else {
+          window.addEventListener('load', () => setTimeout(resolve, 100));
         }
-      );
-    });
+      });
+    `);
 
-  } catch (e) {
-    console.log("❌ [PRINT] erro:", e);
-    printWin.close();
-    return false;
+    // **CORREÇÃO PRINCIPAL AQUI** - pageSize precisa de height e width
+    const printOptions = {
+      silent: true,
+      deviceName: printerName,
+      printBackground: true,
+      margins: { marginType: 'none' },
+      pageSize: {
+        width: larguraMicrons,
+        height: alturaMicrons 
+      },
+      pageSizeOrientation: 'portrait', // ou 'landscape' se necessário
+      copies: 1
+    };
+
+    console.log(`🖨️ Imprimindo ${larguraMM}mm na impressora: ${printerName || 'Padrão'}`);
+    console.log(`📏 Tamanho da página: ${larguraMicrons}x${alturaMicrons} microns`);
+
+    // Uso do método nativo
+    await win.webContents.print(printOptions);
+    console.log(`✅ Impressão ${larguraMM}mm enviada com sucesso.`);
+
+    return { 
+      success: true, 
+      message: `Impressão ${larguraMM}mm enviada`,
+      larguraUtilizada: larguraMM 
+    };
+
+  } catch (error) {
+    console.error("❌ Erro na impressão nativa:", error);
+
+    // Tenta fallback com opções mais simples
+    console.log("🔄 Tentando fallback com opções mais simples...");
+    try {
+      await win.webContents.print({
+        silent: true,
+        deviceName: printerName,
+        printBackground: true,
+        margins: { marginType: 'none' }
+      });
+      console.log("✅ Impressão fallback bem-sucedida.");
+      return { 
+        success: true, 
+        message: "Impressão fallback enviada",
+        larguraUtilizada: larguraMM 
+      };
+    } catch (fallbackError) {
+      console.error("❌ Erro no fallback também:", fallbackError);
+      return {
+        success: false,
+        error: fallbackError.message,
+        larguraUtilizada: larguraMM
+      };
+    }
+  } finally {
+    // Cleanup
+    setTimeout(() => {
+      if (win && !win.isDestroyed()) {
+        win.close();
+        win.destroy();
+        win = null;
+      }
+
+      // Deletar arquivo temporário
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+          console.log(`🧹 Arquivo temporário removido: ${filePath}`);
+        }
+      } catch (e) {
+        console.warn("⚠️ Não foi possível deletar o arquivo temporário:", e);
+      }
+    }, 2000);
   }
 }
-
 
 module.exports = { imprimirHTMLSilencioso };

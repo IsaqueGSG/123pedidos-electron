@@ -2,9 +2,6 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("electronAPI", {
 
-  printHTML: (html, largura) =>
-    ipcRenderer.invoke("print-html", { html, largura }),
-
   enviarWhats: (idLoja, telefone, texto) =>
     ipcRenderer.invoke("whats-send", { idLoja, telefone, texto }),
 
@@ -39,7 +36,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("printer-set", nome),
 
   getPrinter: () =>
-    ipcRenderer.invoke("printer-get")
+    ipcRenderer.invoke("printer-get"),
+
+  imprimirPedido: (html, estilos, largura = 80) =>
+    ipcRenderer.invoke('imprimir-pedido', html, estilos, largura)
 
 });
 
