@@ -1,17 +1,24 @@
-const { ipcMain, BrowserWindow } = require("electron");
+const { ipcMain } = require("electron");
+const { exec } = require("child_process");
 const { salvarImpressora, getImpressoraSalva } = require("../services/printerConfig.service");
 
 ipcMain.handle("printer-list", async () => {
-  const win = BrowserWindow.getAllWindows()[0];
-  if (!win) return [];
+  return new Promise((resolve, reject) => {
+    exec('powershell -Command "Get-Printer | ForEach-Object {$_.Name}"', (err, stdout) => {
+        if (err) return reject(err);
 
-  const printers = await win.webContents.getPrintersAsync();
+        const printers = stdout
+          .split("\n")
+          .map(p => p.trim())
+          .filter(p => p.length > 0);
 
-  return printers.map(p => ({
-    name: p.name,
-    displayName: p.displayName,
-    isDefault: p.isDefault
-  }));
+        resolve(printers.map(name => ({
+          name,
+          displayName: name,
+          isDefault: false
+        })));
+      });
+  });
 });
 
 ipcMain.handle("printer-set", (_, nome) => {

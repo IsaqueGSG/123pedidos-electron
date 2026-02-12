@@ -38,8 +38,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getPrinter: () =>
     ipcRenderer.invoke("printer-get"),
 
-  imprimirPedido: (html, estilos, largura = 80) =>
-    ipcRenderer.invoke('imprimir-pedido', html, estilos, largura)
+  imprimirPedido: (pedido, largura = "80mm") => {
+    const larguraNumerica = Number(String(largura).replace("mm", ""));
+    return ipcRenderer.invoke("imprimir-pedido", pedido, larguraNumerica);
+  }
 
 });
 

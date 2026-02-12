@@ -1,5 +1,4 @@
 const fs = require("fs");
-const fsPromises = fs.promises;
 const path = require("path");
 const os = require("os");
 const { spawn } = require("child_process");
@@ -8,70 +7,51 @@ const { getImpressoraSalva } = require("./printerConfig.service");
 /**
  * Envia buffer RAW para impressora compartilhada no Windows (CMD + copy /b)
  */
-async function enviarRawWindows(buffer, printerName) {
-  const tempFile = path.join(os.tmpdir(), `print_${Date.now()}.bin`);
+function enviarRawWindows(buffer, printerName) {
+  return new Promise((resolve, reject) => {
+    try {
+      const tempFile = path.join(os.tmpdir(), `print_${Date.now()}.bin`);
+      fs.writeFileSync(tempFile, buffer);
 
-  try {
-    // escreve arquivo temporário
-    await fsPromises.writeFile(tempFile, buffer);
+      // comando CMD com copy /b
+      const caminho = `\\\\${os.hostname()}\\${printerName}`;
 
-    // caminho da impressora (pode substituir os.hostname() por nome fixo)
-    const caminho = `\\\\${os.hostname()}\\${printerName}`;
-
-    return new Promise((resolve, reject) => {
+      // usar spawn com shell: true e escapar as aspas
       const child = spawn("cmd.exe", ["/c", `copy /b "${tempFile}" "${caminho}"`], {
         windowsHide: true,
         shell: true
       });
 
-      let errorOutput = "";
-      let output = "";
 
-      child.stderr.on("data", (data) => {
+      let errorOutput = "";
+      child.stderr.on("data", data => {
         errorOutput += data.toString();
       });
 
-      child.stdout.on("data", (data) => {
-        output += data.toString();
-      });
-
-      child.on("close", async (code) => {
-        // remove arquivo temporário
-        try {
-          await fsPromises.unlink(tempFile);
-        } catch (err) {
-          console.warn("Não foi possível remover arquivo temporário:", err.message);
-        }
+      child.on("close", code => {
+        fs.unlink(tempFile, () => { }); // remove arquivo temporário
 
         if (code !== 0) {
-          console.error("Erro print:", errorOutput || output);
+          console.log("Erro print:", errorOutput);
           reject(new Error("Falha ao enviar para spooler"));
         } else {
           resolve({ success: true });
         }
       });
-    });
-  } catch (err) {
-    // caso dê erro na escrita do arquivo temporário
-    try {
-      await fsPromises.unlink(tempFile);
-    } catch {}
-    throw err;
-  }
+    } catch (err) {
+      reject(err);
+    }
+  });
 }
 
-/**
- * Gera buffer ESC/POS do pedido
- */
 function gerarComandaESCPos(pedido, larguraMM) {
   const ESC = "\x1B";
   const GS = "\x1D";
 
   let conteudo = "";
-  const divider =
-    larguraMM === 58
-      ? "--------------------------------\n"
-      : "------------------------------------------------\n";
+  const divider = larguraMM === 58
+    ? "--------------------------------\n"
+    : "------------------------------------------------\n";
 
   conteudo += ESC + "@"; // init
   conteudo += ESC + "a" + "\x01"; // centralizado
@@ -86,12 +66,13 @@ function gerarComandaESCPos(pedido, larguraMM) {
   conteudo += `Telefone: ${pedido.cliente?.telefone || ""}\n`;
   conteudo += divider;
 
-  pedido.itens.forEach((item) => {
+  pedido.itens.forEach(item => {
     conteudo += ESC + "E" + "\x01";
     conteudo += `${item.quantidade}x ${item.nome}\n`;
     conteudo += ESC + "E" + "\x00";
 
-    if (item.observacao) conteudo += `Obs: ${item.observacao}\n`;
+    if (item.observacao)
+      conteudo += `Obs: ${item.observacao}\n`;
 
     conteudo += `R$ ${item.valor.toFixed(2)}\n\n`;
   });
@@ -107,9 +88,6 @@ function gerarComandaESCPos(pedido, larguraMM) {
   return Buffer.from(conteudo, "latin1");
 }
 
-/**
- * Imprime pedido ESC/POS
- */
 async function imprimirPedidoPedidoObj(pedido, larguraMM = 80) {
   const printerName = getImpressoraSalva();
   if (!printerName) throw new Error("Nenhuma impressora configurada");
@@ -122,5 +100,5 @@ async function imprimirPedidoPedidoObj(pedido, larguraMM = 80) {
 }
 
 module.exports = {
-  imprimirPedidoPedidoObj,
+  imprimirPedidoPedidoObj
 };

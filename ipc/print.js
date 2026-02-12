@@ -1,16 +1,10 @@
 const { ipcMain } = require("electron");
-const { imprimirHTMLSilencioso } = require("../services/print.service");
+const { imprimirPedidoPedidoObj } = require("../services/print.service");
 
-ipcMain.handle("imprimir-pedido", async (_, html, estilos, largura) => {
+ipcMain.handle("imprimir-pedido", async (_, pedido, largura) => {
   try {
-    const resultado = await imprimirHTMLSilencioso(html, estilos, Number(largura));
-    return resultado;
+    return await imprimirPedidoPedidoObj(pedido, largura);
   } catch (error) {
-    console.error('Erro na impressão:', error);
-    return {
-      success: false,
-      error: error.message,
-      larguraUtilizada: largura
-    };
+    return { success: false, error: error.message };
   }
 });

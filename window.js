@@ -1,4 +1,4 @@
-const { BrowserWindow } = require("electron");
+const { app, BrowserWindow } = require("electron");
 const path = require("path");
 
 function createMainWindow() {
@@ -16,7 +16,13 @@ function createMainWindow() {
 
   // limpa cache antes de carregar
   win.webContents.session.clearCache().then(() => {
-    win.loadURL("https://123pedidos.web.app/selecionarloja");
+    if (!app.isPackaged) {
+      console.log("Carregando localhost");
+      win.loadURL("http://localhost:5173/selecionarloja");
+
+    } else {
+      win.loadURL("https://123pedidos.web.app/selecionarloja");
+    }
   });
 
   // útil pra debug
