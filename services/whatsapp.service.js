@@ -39,33 +39,40 @@ function getAuthDir(idLoja) {
 
 // ------------------------
 async function criarSocket(idLoja) {
-  log(idLoja, "Criando socket Baileys");
+  try {
+    log(idLoja, "Criando socket Baileys");
 
-  const { state, saveCreds } = await useMultiFileAuthState(getAuthDir(idLoja));
-  const { version } = await fetchLatestBaileysVersion();
+    const { state, saveCreds } = await useMultiFileAuthState(getAuthDir(idLoja));
+    const { version } = await fetchLatestBaileysVersion();
 
-  const sock = makeWASocket({
-    version,
-    auth: state,
+    const sock = makeWASocket({
+      version,
+      auth: state,
+      logger: P({ level: "silent" }),
+      browser: ["Chrome", "Desktop", "123pedidos"],
+      markOnlineOnConnect: false,
+      syncFullHistory: false
+    });
 
-    logger: P({ level: "silent" }),
+    sock.ev.on("creds.update", saveCreds);
 
-    // fingerprint menos “bot”
-    browser: ["Chrome", "Desktop", "123pedidos"],
+    attachEvents(sock, idLoja);
 
-    markOnlineOnConnect: false,
-    syncFullHistory: false
-  });
+    sockets.set(idLoja, sock);
 
-  sock.ev.on("creds.update", saveCreds);
+    statusMap.set(idLoja, "disconnected");
+    enviarRenderer("whats-status", { idLoja, status: "disconnected" });
 
-  attachEvents(sock, idLoja);
+    return sock;
 
-  sockets.set(idLoja, sock);
-  statusMap.set(idLoja, "connecting");
-  enviarRenderer("whats-status", { idLoja, status: "starting" });
+  } catch (err) {
+    log(idLoja, "Erro criar socket:", err.message);
 
-  return sock;
+    statusMap.set(idLoja, "error");
+    enviarRenderer("whats-status", { idLoja, status: "error" });
+
+    throw err;
+  }
 }
 
 
@@ -76,60 +83,58 @@ function attachEvents(sock, idLoja) {
     const { connection, qr, lastDisconnect } = update;
 
     if (qr) {
-      let qrImg = null;
-      try {
-        qrImg = await QRCode.toDataURL(qr);
-      } catch (e) {
-        log(idLoja, "Erro gerar QR:", e.message);
-        return;
-      }
+      const qrImg = await QRCode.toDataURL(qr);
 
       enviarRenderer("whats-qr", {
         idLoja,
         qr: qrImg
       });
 
-      statusMap.set(idLoja, "qr");
-      enviarRenderer("whats-status", { idLoja, status: "qr" });
+      // 🔥 sempre que tiver QR = desconectado
+      statusMap.set(idLoja, "disconnected");
+      enviarRenderer("whats-status", { idLoja, status: "disconnected" });
     }
 
     if (connection === "open") {
       log(idLoja, "READY");
+
       statusMap.set(idLoja, "ready");
       enviarRenderer("whats-status", { idLoja, status: "ready" });
+
       processarFila(idLoja);
     }
 
     if (connection === "close") {
       const code = lastDisconnect?.error?.output?.statusCode;
-
-      // Se o usuário deslogou manualmente pelo celular
       const isLoggedOut = code === DisconnectReason.loggedOut;
 
-      log(idLoja, "Conexão fechada. Motivo:", code);
+      log(idLoja, "Conexão fechada. Código:", code);
 
       statusMap.set(idLoja, "disconnected");
       enviarRenderer("whats-status", { idLoja, status: "disconnected" });
 
+      try {
+        sock?.end?.();
+      } catch { }
+
       sockets.delete(idLoja);
 
       if (isLoggedOut) {
-        log(idLoja, "Usuário deslogou. Limpando sessão...");
         const dir = getAuthDir(idLoja);
-        // Remove a pasta de credenciais para forçar novo QR no próximo init
         if (fs.existsSync(dir)) {
           fs.rmSync(dir, { recursive: true, force: true });
         }
       }
 
-      // Reconecta automaticamente se não foi um log out manual
-      if (!isLoggedOut) {
-        setTimeout(() => getSocket(idLoja), 4000);
-      }
+      setTimeout(() => {
+        if (!sockets.has(idLoja) && !creating.has(idLoja)) {
+          getSocket(idLoja);
+        }
+      }, 2000);
     }
+
   });
 }
-
 
 // ------------------------
 const creating = new Map();
