@@ -18,7 +18,8 @@
       }
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "artifactName": "123pedidos-Setup-${version}.${ext}"
     }
   },
   "keywords": [],
@@ -32,7 +33,6 @@
   "dependencies": {
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "electron-updater": "^6.7.3",
-    "node-thermal-printer": "^4.6.0",
     "pino": "^10.3.0",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0"

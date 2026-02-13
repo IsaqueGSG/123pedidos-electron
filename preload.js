@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, shell } = require("electron");
 
 contextBridge.exposeInMainWorld("electronAPI", {
 
@@ -41,7 +41,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   imprimirPedido: (pedido, largura = "80mm") => {
     const larguraNumerica = Number(String(largura).replace("mm", ""));
     return ipcRenderer.invoke("imprimir-pedido", pedido, larguraNumerica);
-  }
+  },
+
+  openExternal: (url) => shell.openExternal(url)
 
 });
 
