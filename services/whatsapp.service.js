@@ -98,8 +98,17 @@ function attachEvents(sock, idLoja) {
     if (connection === "open") {
       log(idLoja, "READY");
 
+      const numero = sock.user?.id?.split(":")[0] || null; // 5511999999999
+      const nome = sock.user?.name || null;
+
       statusMap.set(idLoja, "ready");
-      enviarRenderer("whats-status", { idLoja, status: "ready" });
+
+      enviarRenderer("whats-status", {
+        idLoja,
+        status: "ready",
+        numero,
+        nome
+      });
 
       processarFila(idLoja);
     }
@@ -242,10 +251,33 @@ async function enviarWhats(idLoja, telefone, texto) {
   return { ok: true };
 }
 
+async function logoutWhats(idLoja) {
+  const sock = sockets.get(idLoja);
 
-// ------------------------
+  try {
+    if (sock) {
+      await sock.logout(); // força logout do WhatsApp
+      sock.end();
+    }
+  } catch (e) {
+    log(idLoja, "Erro ao fazer logout:", e.message);
+  }
+
+  sockets.delete(idLoja);
+
+  // apagar sessão salva (multi file auth)
+  const dir = getAuthDir(idLoja);
+  if (fs.existsSync(dir)) {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+
+  statusMap.set(idLoja, "disconnected");
+  enviarRenderer("whats-status", { idLoja, status: "disconnected" });
+}
+
 module.exports = {
   getSocket,
   enviarWhats,
-  statusMap
+  statusMap,
+  logoutWhats
 };

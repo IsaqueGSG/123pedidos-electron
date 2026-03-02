@@ -23,6 +23,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return () => ipcRenderer.removeListener("whats-status", h);
   },
 
+  logoutWhats: (idLoja) =>
+    ipcRenderer.invoke("whats-logout", idLoja),
+
   onLogMessage: (callback) => {
     ipcRenderer.on("log-message", (event, data) => {
       callback(data);
