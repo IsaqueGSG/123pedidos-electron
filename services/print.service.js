@@ -73,8 +73,8 @@ function gerarComandaESCPos(pedido, larguraMM = 80) {
   let conteudo = "";
   const is58 = larguraMM === 58;
   const divider = is58
-    ? "--------------------------------\n"
-    : "------------------------------------------------\n";
+    ? "------------------------------\n"
+    : "----------------------------------------\n";
 
   // 1. Inicialização
   conteudo += ESC + "@";
@@ -116,23 +116,36 @@ function gerarComandaESCPos(pedido, larguraMM = 80) {
   let subTotalItens = 0;
 
   Object.entries(itensPorTipo).forEach(([tipo, itens]) => {
-    conteudo += ESC + "E" + "\x01" + `${tipo.toUpperCase()}\n` + ESC + "E" + "\x00";
+    conteudo += ESC + "E" + "\x01";
+    conteudo += `${tipo.toUpperCase()}\n`;
+    conteudo += ESC + "E" + "\x00";
 
     itens.forEach((item) => {
       subTotalItens += item.valor * (item.quantidade ?? 1);
 
-      // Linha do produto em negrito
+      // Produto em negrito
       conteudo += ESC + "E" + "\x01";
       conteudo += `${item.quantidade}x ${item.nome}\n`;
       conteudo += ESC + "E" + "\x00";
 
-      // Detalhes extras (Borda, Extras, Obs)
-      if (item.borda?.nome) conteudo += `  Borda: ${item.borda.nome}\n`;
-      if (item.extras?.length) {
-        const extrasStr = item.extras.map(e => e.nome).join(", ");
-        conteudo += `  Extras: ${extrasStr}\n`;
+      // Borda
+      if (item.borda?.nome) {
+        conteudo += `   BORDA: ${item.borda.nome}\n`;
       }
-      if (item.observacao) conteudo += `  Obs: ${item.observacao}\n`;
+
+      // Extras (AGORA IGUAL HTML)
+      if (item.extras?.length) {
+        conteudo += `   EXTRAS:\n`;
+
+        item.extras.forEach(e => {
+          conteudo += `    ↳ ${e.nome} (+${e.valor.toFixed(2)})\n`;
+        });
+      }
+
+      // Observação
+      if (item.observacao) {
+        conteudo += `   OBS: ${item.observacao}\n`;
+      }
 
       conteudo += "\n";
     });
@@ -154,15 +167,12 @@ function gerarComandaESCPos(pedido, larguraMM = 80) {
   conteudo += `Total dos itens: R$ ${subTotalItens.toFixed(2)}\n`;
   conteudo += `Taxa de entrega: R$ ${(endereco.taxaEntrega ?? 0).toFixed(2)}\n`;
 
-  conteudo += ESC + "a" + "\x02"; // Alinhar à direita para o Total
-  conteudo += ESC + "E" + "\x01"; // Negrito
+  conteudo += divider;
+  conteudo += ESC + "a" + "\x02"; // direita
+  conteudo += ESC + "!" + "\x30"; // fonte maior
   conteudo += `TOTAL: R$ ${pedido.total.toFixed(2)}\n`;
-  conteudo += ESC + "E" + "\x00";
-
-  // 7. Rodapé
-  conteudo += "\n";
-  conteudo += ESC + "a" + "\x01"; // Centralizar
-  conteudo += "Obrigado pela preferência\n\n\n";
+  conteudo += ESC + "!" + "\x00"; // normal
+  conteudo += ESC + "a" + "\x00"; // volta esquerda
 
   // Corte de papel
   conteudo += GS + "V" + "\x00";

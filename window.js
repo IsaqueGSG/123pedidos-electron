@@ -14,19 +14,15 @@ function createMainWindow() {
     }
   });
 
-  // limpa cache antes de carregar
   win.webContents.session.clearCache().then(() => {
     if (!app.isPackaged) {
-      console.log("Carregando localhost");
-      win.loadURL("http://localhost:5173/selecionarloja");
-
+      win.loadURL("http://localhost:5173/login");
     } else {
-      win.loadURL("https://123pedidos.web.app/selecionarloja");
+      win.loadURL("https://123pedidos.web.app/login");
     }
   });
 
-  // útil pra debug
-  // win.webContents.openDevTools();
+  return win;
 }
 
 module.exports = { createMainWindow };
