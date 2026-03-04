@@ -97,10 +97,10 @@ function gerarComandaESCPos(pedido, larguraMM = 80) {
   // 3. Entrega
   conteudo += ESC + "E" + "\x01" + "Entrega:\n" + ESC + "E" + "\x00";
 
+  const endereco = pedido.cliente?.endereco || {};
   if (pedido.entregarNaLoja) {
     conteudo += "Retirar na loja\n";
   } else {
-    const endereco = pedido.cliente?.endereco || {};
     conteudo += `${endereco.rua || ""}, ${endereco.numero || ""}\n`;
     conteudo += `${endereco.bairro || ""} - ${endereco.cidade || ""}/${endereco.uf || ""}\n`;
     if (endereco.observacao) {
