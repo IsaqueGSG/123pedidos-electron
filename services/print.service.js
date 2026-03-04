@@ -95,14 +95,19 @@ function gerarComandaESCPos(pedido, larguraMM = 80) {
   conteudo += divider;
 
   // 3. Entrega
-  const endereco = pedido.cliente?.endereco || {};
   conteudo += ESC + "E" + "\x01" + "Entrega:\n" + ESC + "E" + "\x00";
-  conteudo += `${endereco.rua || ""}, ${endereco.numero || ""}\n`;
-  conteudo += `${endereco.bairro || ""} - ${endereco.cidade || ""}/${endereco.uf || ""}\n`;
 
-  if (endereco.observacao) {
-    conteudo += `Obs: ${endereco.observacao}\n`;
+  if (pedido.entregarNaLoja) {
+    conteudo += "Retirar na loja\n";
+  } else {
+    const endereco = pedido.cliente?.endereco || {};
+    conteudo += `${endereco.rua || ""}, ${endereco.numero || ""}\n`;
+    conteudo += `${endereco.bairro || ""} - ${endereco.cidade || ""}/${endereco.uf || ""}\n`;
+    if (endereco.observacao) {
+      conteudo += `Obs: ${endereco.observacao}\n`;
+    }
   }
+
   conteudo += divider;
 
   // 4. Itens (Agrupados por tipo como no HTML)
@@ -138,7 +143,7 @@ function gerarComandaESCPos(pedido, larguraMM = 80) {
         conteudo += `   EXTRAS:\n`;
 
         item.extras.forEach(e => {
-          conteudo += `    ↳ ${e.nome} (+${e.valor.toFixed(2)})\n`;
+          conteudo += `    -> ${e.nome} (+${e.valor.toFixed(2)})\n`;
         });
       }
 

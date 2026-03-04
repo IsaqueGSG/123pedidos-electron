@@ -46,6 +46,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return ipcRenderer.invoke("imprimir-pedido", pedido, larguraNumerica);
   },
 
+  getLargura: () => ipcRenderer.invoke("getLargura"),
+  
+  setLargura: (largura) => ipcRenderer.invoke("setLargura", largura),
+
   openExternal: (url) => shell.openExternal(url)
 
 });

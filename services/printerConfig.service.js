@@ -6,28 +6,51 @@ function getConfigPath() {
   return path.join(app.getPath("userData"), "printer.json");
 }
 
-function salvarImpressora(nome) {
+function lerConfig() {
+  const p = getConfigPath();
+
+  if (!fs.existsSync(p)) return {};
+
+  try {
+    return JSON.parse(fs.readFileSync(p, "utf-8"));
+  } catch {
+    return {};
+  }
+}
+
+function salvarConfig(config) {
   fs.writeFileSync(
     getConfigPath(),
-    JSON.stringify({ nome }),
+    JSON.stringify(config, null, 2),
     "utf-8"
   );
 }
 
+function salvarImpressora(nome) {
+  const config = lerConfig();
+  config.nome = nome;
+  salvarConfig(config);
+}
+
 function getImpressoraSalva() {
-  const p = getConfigPath();
+  const config = lerConfig();
+  return config.nome || null;
+}
 
-  if (!fs.existsSync(p)) return null;
+function salvarLargura(largura) {
+  const config = lerConfig();
+  config.largura = largura;
+  salvarConfig(config);
+}
 
-  try {
-    const data = JSON.parse(fs.readFileSync(p, "utf-8"));
-    return data.nome || null;
-  } catch {
-    return null;
-  }
+function getLarguraSalva() {
+  const config = lerConfig();
+  return config.largura || "80mm"; // default
 }
 
 module.exports = {
   salvarImpressora,
-  getImpressoraSalva
+  getImpressoraSalva,
+  salvarLargura,
+  getLarguraSalva
 };
