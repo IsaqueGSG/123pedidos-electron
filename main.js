@@ -31,17 +31,19 @@ function createUpdateWindow() {
     closable: false,
     fullscreenable: false,
     skipTaskbar: true,
-    modal: true,
-    parent: mainWindow || undefined,
+    focusable: true,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
 
+  updateWindow.focus();
+
   // Desabilita interação com a janela principal
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.setEnabled(false);
+    mainWindow.setIgnoreMouseEvents(true);
+    mainWindow.setFocusable(false);
   }
 
   updateWindow.loadURL(
@@ -70,6 +72,12 @@ function createUpdateWindow() {
   );
 }
 
+function checkUpdatesWithRetry() {
+  autoUpdater.checkForUpdates().catch(() => {
+    setTimeout(checkUpdatesWithRetry, 15000); // tenta novamente
+  });
+}
+
 app.whenReady().then(() => {
   mainWindow = createMainWindow();
 
@@ -78,39 +86,47 @@ app.whenReady().then(() => {
     return;
   }
 
-  // Aguarda a janela carregar (evita bugs de foco)
-  mainWindow.webContents.once("did-finish-load", () => {
-    setTimeout(() => {
-      autoUpdater.checkForUpdates();
-    }, 2000);
+  setTimeout(checkUpdatesWithRetry, 5000);
+
+  mainWindow.on("close", (e) => {
+    if (isUpdating) {
+      e.preventDefault();
+    }
   });
 });
 
-// Silencioso
 autoUpdater.on("checking-for-update", () => {
   console.log("Verificando atualizações...");
 });
 
-// 🔥 Encontrou update → bloqueia tudo
-autoUpdater.on("update-available", () => {
-  console.log("Atualização encontrada");
-  isUpdating = true;
-  createUpdateWindow();
-});
-
-// Se não houver update → absolutamente nada acontece
 autoUpdater.on("update-not-available", () => {
   console.log("App já está atualizado");
 });
 
-// Baixou → instala automaticamente (SEM PERGUNTAR)
+autoUpdater.on("update-available", () => {
+  isUpdating = true;
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setIgnoreMouseEvents(true);
+    mainWindow.setFocusable(false);
+    mainWindow.blur();
+  }
+  createUpdateWindow();
+});
+
 autoUpdater.on("update-downloaded", () => {
-  console.log("Update baixado. Instalando automaticamente...");
   autoUpdater.quitAndInstall(false, true);
 });
 
 autoUpdater.on("error", (err) => {
   console.error("Erro no update:", err);
+
+  if (isUpdating) {
+    app.quit(); // update obrigatório falhou
+  } else {
+    // tenta novamente depois
+    setTimeout(checkUpdatesWithRetry, 15000);
+  }
 });
 
 app.on("window-all-closed", () => {

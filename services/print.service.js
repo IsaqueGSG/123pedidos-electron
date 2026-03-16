@@ -60,25 +60,27 @@ async function enviarRawWindows(buffer, printerName) {
   }
 }
 
-/**
- * Gera buffer ESC/POS do pedido
- */
-/**
- * Gera buffer ESC/POS baseado na estrutura de dados do Front-end
- */
 function gerarComandaESCPos(pedido, larguraMM = 80) {
   const ESC = "\x1B";
   const GS = "\x1D";
 
   let conteudo = "";
+
   const is58 = larguraMM === 58;
   const divider = is58
     ? "------------------------------\n"
     : "----------------------------------------\n";
 
-  // 1. Inicialização
+  // Inicialização
   conteudo += ESC + "@";
-  conteudo += ESC + "a" + "\x01"; // Centralizar cabeçalho
+
+  // 🇧🇷 Codepage português
+  conteudo += ESC + "t" + "\x10";
+
+  // 🔥 Fonte levemente maior
+  conteudo += GS + "!" + "\x01";
+
+  conteudo += ESC + "a" + "\x01";
 
   // 2. Cabeçalho (Nome, Telefone, Data)
   const data = pedido.createdAt?.seconds
@@ -98,11 +100,13 @@ function gerarComandaESCPos(pedido, larguraMM = 80) {
   conteudo += ESC + "E" + "\x01" + "Entrega:\n" + ESC + "E" + "\x00";
 
   const endereco = pedido.cliente?.endereco || {};
-  if (pedido.entregarNaLoja) {
+
+  if (pedido.retirarNaLoja) {
     conteudo += "Retirar na loja\n";
   } else {
     conteudo += `${endereco.rua || ""}, ${endereco.numero || ""}\n`;
     conteudo += `${endereco.bairro || ""} - ${endereco.cidade || ""}/${endereco.uf || ""}\n`;
+
     if (endereco.observacao) {
       conteudo += `Obs: ${endereco.observacao}\n`;
     }
@@ -175,7 +179,7 @@ function gerarComandaESCPos(pedido, larguraMM = 80) {
   conteudo += divider;
   conteudo += ESC + "a" + "\x02"; // direita
   conteudo += ESC + "!" + "\x30"; // fonte maior
-  conteudo += `TOTAL: R$ ${pedido.total.toFixed(2)}\n`;
+  conteudo += `TOTAL: R$ ${(pedido.total ?? 0).toFixed(2)}\n`;
   conteudo += ESC + "!" + "\x00"; // normal
   conteudo += ESC + "a" + "\x00"; // volta esquerda
 
