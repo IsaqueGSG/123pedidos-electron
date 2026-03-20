@@ -15,7 +15,6 @@ ipcMain.handle("whats-status", (_, idLoja) => {
   return statusMap.get(idLoja) || "disconnected";
 });
 
-// SEND
 ipcMain.handle("whats-send", (_, payload) => {
   return enviarWhats(payload.idLoja, payload.telefone, payload.texto);
 });

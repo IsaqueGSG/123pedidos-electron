@@ -60,43 +60,64 @@ async function enviarRawWindows(buffer, printerName) {
   }
 }
 
+function limparTexto(texto = "") {
+  return texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x20-\x7E\n]/g, "");
+}
+
+function quebrarLinha(texto, max) {
+  const palavras = texto.split(" ");
+  let linha = "";
+  let resultado = "";
+
+  for (const palavra of palavras) {
+    if ((linha + palavra).length > max) {
+      resultado += linha.trim() + "\n";
+      linha = palavra + " ";
+    } else {
+      linha += palavra + " ";
+    }
+  }
+
+  return resultado + linha.trim();
+}
+
 function gerarComandaESCPos(pedido, larguraMM = 80) {
   const ESC = "\x1B";
   const GS = "\x1D";
 
+  const t = limparTexto;
+
+  const charsPorLinha = larguraMM === 58 ? 32 : 48;
+  const divider = "-".repeat(charsPorLinha) + "\n";
+
   let conteudo = "";
 
-  const is58 = larguraMM === 58;
-  const divider = is58
-    ? "------------------------------\n"
-    : "----------------------------------------\n";
+  // avanço inicial
+  conteudo += "\n";
 
-  // Inicialização
-  conteudo += ESC + "@";
-
-  // 🇧🇷 Codepage português
-  conteudo += ESC + "t" + "\x10";
-
-  // 🔥 Fonte levemente maior
-  conteudo += GS + "!" + "\x01";
-
+  // centralizado
   conteudo += ESC + "a" + "\x01";
 
-  // 2. Cabeçalho (Nome, Telefone, Data)
+  // Cabeçalho
   const data = pedido.createdAt?.seconds
     ? new Date(pedido.createdAt.seconds * 1000).toLocaleString("pt-BR")
     : new Date().toLocaleString("pt-BR");
 
-  conteudo += ESC + "E" + "\x01"; // Negrito ON
-  conteudo += `${(pedido.cliente?.nome || "").toUpperCase()}\n`;
-  conteudo += ESC + "E" + "\x00"; // Negrito OFF
-  conteudo += `${pedido.cliente?.telefone || ""}\n`;
-  conteudo += `${data}\n`;
+  conteudo += ESC + "E" + "\x01";
+  conteudo += quebrarLinha(t((pedido.cliente?.nome || "").toUpperCase()), charsPorLinha) + "\n";
+  conteudo += ESC + "E" + "\x00";
 
-  conteudo += ESC + "a" + "\x00"; // Alinhamento à esquerda
+  conteudo += quebrarLinha(t(pedido.cliente?.telefone || ""), charsPorLinha) + "\n";
+  conteudo += quebrarLinha(t(data), charsPorLinha) + "\n";
+
+  // ESQUERDA
+  conteudo += ESC + "a" + "\x00";
   conteudo += divider;
 
-  // 3. Entrega
+  // ENTREGA
   conteudo += ESC + "E" + "\x01" + "Entrega:\n" + ESC + "E" + "\x00";
 
   const endereco = pedido.cliente?.endereco || {};
@@ -104,17 +125,24 @@ function gerarComandaESCPos(pedido, larguraMM = 80) {
   if (pedido.retirarNaLoja) {
     conteudo += "Retirar na loja\n";
   } else {
-    conteudo += `${endereco.rua || ""}, ${endereco.numero || ""}\n`;
-    conteudo += `${endereco.bairro || ""} - ${endereco.cidade || ""}/${endereco.uf || ""}\n`;
+    conteudo += quebrarLinha(
+      `${t(endereco.rua || "")}, ${t(endereco.numero || "")}`,
+      charsPorLinha
+    ) + "\n";
+
+    conteudo += quebrarLinha(
+      `${t(endereco.bairro || "")} - ${t(endereco.cidade || "")}/${t(endereco.uf || "")}`,
+      charsPorLinha
+    ) + "\n";
 
     if (endereco.observacao) {
-      conteudo += `Obs: ${endereco.observacao}\n`;
+      conteudo += quebrarLinha(`Obs: ${t(endereco.observacao)}`, charsPorLinha) + "\n";
     }
   }
 
   conteudo += divider;
 
-  // 4. Itens (Agrupados por tipo como no HTML)
+  // ITENS
   const itensPorTipo = pedido.itens.reduce((acc, item) => {
     const tipo = item.tipo || "Itens";
     if (!acc[tipo]) acc[tipo] = [];
@@ -126,67 +154,71 @@ function gerarComandaESCPos(pedido, larguraMM = 80) {
 
   Object.entries(itensPorTipo).forEach(([tipo, itens]) => {
     conteudo += ESC + "E" + "\x01";
-    conteudo += `${tipo.toUpperCase()}\n`;
+    conteudo += t(tipo.toUpperCase()) + "\n";
     conteudo += ESC + "E" + "\x00";
 
     itens.forEach((item) => {
       subTotalItens += item.valor * (item.quantidade ?? 1);
 
-      // Produto em negrito
       conteudo += ESC + "E" + "\x01";
-      conteudo += `${item.quantidade}x ${item.nome}\n`;
+      conteudo += quebrarLinha(`${item.quantidade}x ${t(item.nome)}`, charsPorLinha) + "\n";
       conteudo += ESC + "E" + "\x00";
 
-      // Borda
       if (item.borda?.nome) {
-        conteudo += `   BORDA: ${item.borda.nome}\n`;
+        conteudo += "   " + quebrarLinha(`BORDA: ${t(item.borda.nome)}`, charsPorLinha) + "\n";
       }
 
-      // Extras (AGORA IGUAL HTML)
       if (item.extras?.length) {
-        conteudo += `   EXTRAS:\n`;
+        conteudo += "   " + "EXTRAS:\n";
 
         item.extras.forEach(e => {
-          conteudo += `    -> ${e.nome} (+${e.valor.toFixed(2)})\n`;
+          conteudo += "   " + quebrarLinha(
+            `-> ${t(e.nome)} (+${e.valor.toFixed(2)})`,
+            charsPorLinha
+          ) + "\n";
         });
       }
 
-      // Observação
       if (item.observacao) {
-        conteudo += `   OBS: ${item.observacao}\n`;
+        conteudo += "   " + quebrarLinha(`   OBS: ${t(item.observacao)}`, charsPorLinha) + "\n";
       }
 
       conteudo += "\n";
     });
   });
+
   conteudo += divider;
 
-  // 5. Pagamento
-  const pagamento = pedido.cliente?.formaPagamento || {};
-  conteudo += ESC + "E" + "\x01" + "Pagamento:\n" + ESC + "E" + "\x00";
-  conteudo += `${pagamento.forma || ""}\n`;
-
-  if (pagamento.forma === "DINHEIRO" && pagamento.obsPagamento) {
-    conteudo += `Troco para: R$ ${pagamento.obsPagamento}\n`;
-  }
-  conteudo += divider;
-
-  // 6. Valores e Total
+  // VALORES
   conteudo += "Valores:\n";
   conteudo += `Total dos itens: R$ ${subTotalItens.toFixed(2)}\n`;
   conteudo += `Taxa de entrega: R$ ${(endereco.taxaEntrega ?? 0).toFixed(2)}\n`;
 
   conteudo += divider;
-  conteudo += ESC + "a" + "\x02"; // direita
-  conteudo += ESC + "!" + "\x30"; // fonte maior
-  conteudo += `TOTAL: R$ ${(pedido.total ?? 0).toFixed(2)}\n`;
-  conteudo += ESC + "!" + "\x00"; // normal
-  conteudo += ESC + "a" + "\x00"; // volta esquerda
 
-  // Corte de papel
+  // PAGAMENTO
+  const pagamento = pedido.cliente?.formaPagamento || {};
+  conteudo += ESC + "E" + "\x01" + "Pagamento: " + ESC + "E" + "\x00";
+  conteudo += t(pagamento.forma || "") + "\n";
+
+  if (pagamento.forma === "DINHEIRO" && pagamento.obsPagamento) {
+    conteudo += `Troco para: R$ ${t(pagamento.obsPagamento)}\n`;
+  }
+
+  // TOTAL DESTACADO
+  conteudo += ESC + "a" + "\x02";
+  conteudo += GS + "!" + "\x11";
+
+  conteudo += `TOTAL: R$ ${(pedido.total ?? 0).toFixed(2)}\n`;
+
+  conteudo += GS + "!" + "\x00";
+  conteudo += ESC + "a" + "\x00";
+
+  // AVANÇO + CORTE
+  conteudo += "\n\n\n";
   conteudo += GS + "V" + "\x00";
 
-  return Buffer.from(conteudo, "latin1");
+  return Buffer.from(conteudo, "ascii");
 }
 
 /**
