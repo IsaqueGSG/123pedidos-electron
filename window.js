@@ -14,14 +14,12 @@ function createMainWindow() {
     }
   });
 
-  win.webContents.session.clearCache().then(() => {
-    if (!app.isPackaged) {
-      win.loadURL("http://localhost:5173/login");
-    } else {
-      win.loadURL("https://123pedidos.web.app/login");
-    }
-  });
-  
+  if (!app.isPackaged) {
+    win.loadURL("http://localhost:5173/login");
+    win.webContents.session.clearCache().catch(() => {});
+  } else {
+    win.loadURL("https://123pedidos.web.app/login");
+  }
 
   return win;
 }

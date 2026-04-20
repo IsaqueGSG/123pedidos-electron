@@ -41,9 +41,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getPrinter: () =>
     ipcRenderer.invoke("printer-get"),
 
-  imprimirPedido: (pedido, largura = "80mm") => {
+  imprimirPedido: (pedido, largura = "80mm", numComanda) => {
     const larguraNumerica = Number(String(largura).replace("mm", ""));
-    return ipcRenderer.invoke("imprimir-pedido", pedido, larguraNumerica);
+    return ipcRenderer.invoke("imprimir-pedido", pedido, larguraNumerica, numComanda);
   },
 
   getLargura: () => ipcRenderer.invoke("getLargura"),

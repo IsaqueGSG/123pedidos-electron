@@ -84,7 +84,32 @@ function quebrarLinha(texto, max) {
   return resultado + linha.trim();
 }
 
-function gerarComandaESCPos(pedido, larguraMM = 80) {
+function obterCategoriaItem(item) {
+
+  // 1️⃣ Campo direto (mais confiável)
+  if (item.categoriaNome?.trim()) {
+    return item.categoriaNome.trim();
+  }
+
+  // 2️⃣ Categoria dentro do objeto categoria
+  if (item.categoria?.nome?.trim()) {
+    return item.categoria.nome.trim();
+  }
+
+  // 3️⃣ Pizza mista → pegar categoria do primeiro sabor
+  if (item.sabores?.length) {
+    const nome = item.sabores[0]?.categoria?.nome;
+    if (nome?.trim()) return nome.trim();
+  }
+
+  // 4️⃣ Fallbacks
+  if (item.tipo?.trim()) return item.tipo.trim();
+
+  return "Itens";
+}
+
+
+function gerarComandaESCPos(pedido, larguraMM = 80, numComanda) {
   const ESC = "\x1B";
   const GS = "\x1D";
 
@@ -106,8 +131,24 @@ function gerarComandaESCPos(pedido, larguraMM = 80) {
     ? new Date(pedido.createdAt.seconds * 1000).toLocaleString("pt-BR")
     : new Date().toLocaleString("pt-BR");
 
+  // VOLTA PRA ESQUERDA
+  conteudo += ESC + "a" + "\x00";
+
+  // === LINHA 1: NOME + #COMANDA ===
+  const nome = t((pedido.cliente?.nome || "").toUpperCase());
+  const numero = numComanda ? `#${numComanda}` : "";
+
+  // espaço disponível entre nome e número
+  const espaco = charsPorLinha - nome.length - numero.length;
+
+  // evita quebrar se for muito grande
+  const linhaNomeNumero =
+    nome.length + numero.length >= charsPorLinha
+      ? nome + "\n" + numero
+      : nome + " ".repeat(Math.max(1, espaco)) + numero;
+
   conteudo += ESC + "E" + "\x01";
-  conteudo += quebrarLinha(t((pedido.cliente?.nome || "").toUpperCase()), charsPorLinha) + "\n";
+  conteudo += quebrarLinha(linhaNomeNumero, charsPorLinha) + "\n";
   conteudo += ESC + "E" + "\x00";
 
   conteudo += quebrarLinha(t(pedido.cliente?.telefone || ""), charsPorLinha) + "\n";
@@ -118,7 +159,7 @@ function gerarComandaESCPos(pedido, larguraMM = 80) {
   conteudo += divider;
 
   // ENTREGA
-  conteudo += ESC + "E" + "\x01" + "Entrega:\n" + ESC + "E" + "\x00";
+  conteudo += ESC + "E" + "\x01" + "Entrega: " + ESC + "E" + "\x00";
 
   const endereco = pedido.cliente?.endereco || {};
 
@@ -143,18 +184,20 @@ function gerarComandaESCPos(pedido, larguraMM = 80) {
   conteudo += divider;
 
   // ITENS
-  const itensPorTipo = pedido.itens.reduce((acc, item) => {
-    const tipo = item.tipo || "Itens";
-    if (!acc[tipo]) acc[tipo] = [];
-    acc[tipo].push(item);
+  const itensPorCategoria = pedido.itens.reduce((acc, item) => {
+    const categoria = obterCategoriaItem(item);
+
+    if (!acc[categoria]) acc[categoria] = [];
+    acc[categoria].push(item);
+
     return acc;
   }, {});
 
   let subTotalItens = 0;
 
-  Object.entries(itensPorTipo).forEach(([tipo, itens]) => {
+  Object.entries(itensPorCategoria).forEach(([categoria, itens]) => {
     conteudo += ESC + "E" + "\x01";
-    conteudo += t(tipo.toUpperCase()) + "\n";
+    conteudo += t(categoria.toUpperCase()) + "\n";
     conteudo += ESC + "E" + "\x00";
 
     itens.forEach((item) => {
@@ -164,18 +207,20 @@ function gerarComandaESCPos(pedido, larguraMM = 80) {
       conteudo += quebrarLinha(`${item.quantidade}x ${t(item.nome)}`, charsPorLinha) + "\n";
       conteudo += ESC + "E" + "\x00";
 
-      if (item.borda?.nome) {
-        conteudo += "   " + quebrarLinha(`BORDA: ${t(item.borda.nome)}`, charsPorLinha) + "\n";
-      }
+      if (item.selecoes && Object.keys(item.selecoes).length > 0) {
 
-      if (item.extras?.length) {
-        conteudo += "   " + "EXTRAS:\n";
+        Object.entries(item.selecoes).forEach(([grupoId, grupo]) => {
+          conteudo += `   ${grupo.nome.toUpperCase()}:\n`;
 
-        item.extras.forEach(e => {
-          conteudo += "   " + quebrarLinha(
-            `-> ${t(e.nome)} (+${e.valor.toFixed(2)})`,
-            charsPorLinha
-          ) + "\n";
+          grupo.itens.forEach(e => {
+            conteudo +=
+              "   " +
+              quebrarLinha(
+                `-> ${t(e.nome)} (+${e.valor.toFixed(2)})`,
+                charsPorLinha
+              ) +
+              "\n";
+          });
         });
       }
 
@@ -185,6 +230,7 @@ function gerarComandaESCPos(pedido, larguraMM = 80) {
 
       conteudo += "\n";
     });
+
   });
 
   conteudo += divider;
@@ -196,23 +242,28 @@ function gerarComandaESCPos(pedido, larguraMM = 80) {
 
   conteudo += divider;
 
-  // PAGAMENTO
-  const pagamento = pedido.cliente?.formaPagamento || {};
-  conteudo += ESC + "E" + "\x01" + "Pagamento: " + ESC + "E" + "\x00";
-  conteudo += t(pagamento.forma || "") + "\n";
-
-  if (pagamento.forma === "DINHEIRO" && pagamento.obsPagamento) {
-    conteudo += `Troco para: R$ ${t(pagamento.obsPagamento)}\n`;
-  }
-
   // TOTAL DESTACADO
   conteudo += ESC + "a" + "\x02";
   conteudo += GS + "!" + "\x11";
 
-  conteudo += `TOTAL: R$ ${(pedido.total ?? 0).toFixed(2)}\n`;
+  const pagamento = pedido.cliente?.formaPagamento || {};
+  const total = Number(pedido.total || 0);
 
-  conteudo += GS + "!" + "\x00";
-  conteudo += ESC + "a" + "\x00";
+  conteudo += `${pagamento.forma}: R$ ${total.toFixed(2)}\n`;
+
+  conteudo += GS + "!" + "\x00";  // VOLTA TAMANHO NORMAL
+  conteudo += ESC + "a" + "\x00";  // ALINHAMENTO ESQUERDA
+
+  // TROCO (se dinheiro)
+  if (pagamento.forma === "DINHEIRO" && pagamento.obsPagamento) {
+    const recebe = Number(
+      pagamento.obsPagamento.toString().replace(",", ".")
+    );
+    const troco = recebe - total;
+
+    conteudo += "\n";
+    conteudo += `Recebe: R$ ${recebe.toFixed(2)} e devolve R$ ${troco.toFixed(2)}`;
+  }
 
   // AVANÇO + CORTE
   conteudo += "\n\n\n";
@@ -224,13 +275,13 @@ function gerarComandaESCPos(pedido, larguraMM = 80) {
 /**
  * Imprime pedido ESC/POS
  */
-async function imprimirPedidoPedidoObj(pedido, larguraMM = 80) {
+async function imprimirPedidoPedidoObj(pedido, larguraMM = 80, numComanda) {
   const printerName = getImpressoraSalva();
   if (!printerName) throw new Error("Nenhuma impressora configurada");
 
   if (![80, 58].includes(Number(larguraMM))) larguraMM = 80;
 
-  const buffer = gerarComandaESCPos(pedido, larguraMM);
+  const buffer = gerarComandaESCPos(pedido, larguraMM, numComanda);
 
   return enviarRawWindows(buffer, printerName);
 }
