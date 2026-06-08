@@ -41,16 +41,22 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getPrinter: () =>
     ipcRenderer.invoke("printer-get"),
 
-  imprimirPedido: (pedido, largura = "80mm", numComanda) => {
+  imprimirPedido: (pedido, largura = "80mm", numComanda, printer) => {
     const larguraNumerica = Number(String(largura).replace("mm", ""));
-    return ipcRenderer.invoke("imprimir-pedido", pedido, larguraNumerica, numComanda);
+    return ipcRenderer.invoke("imprimir-pedido", pedido, larguraNumerica, numComanda, printer);
   },
 
   getLargura: () => ipcRenderer.invoke("getLargura"),
   
   setLargura: (largura) => ipcRenderer.invoke("setLargura", largura),
 
-  openExternal: (url) => shell.openExternal(url)
+  openExternal: (url) => shell.openExternal(url),
+
+  openPrinterProperties: (printerName) =>
+    ipcRenderer.invoke(
+      "printer-open-properties",
+      printerName
+    ),
 
 });
 

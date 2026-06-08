@@ -5,7 +5,6 @@ const { createMainWindow } = require("./window");
 
 require("./ipc/print");
 require("./ipc/whatsapp");
-require("./ipc/printers");
 
 let mainWindow;
 let updateWindow;

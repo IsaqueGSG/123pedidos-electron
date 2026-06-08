@@ -3,12 +3,12 @@ const fsPromises = fs.promises;
 const path = require("path");
 const os = require("os");
 const { spawn } = require("child_process");
-const { getImpressoraSalva } = require("./printerConfig.service");
+const { app } = require("electron");
 
 /**
  * Envia buffer RAW para impressora compartilhada no Windows (CMD + copy /b)
  */
-async function enviarRawWindows(buffer, printerName) {
+async function enviarRawWindows(buffer, printer) {
   const tempFile = path.join(os.tmpdir(), `print_${Date.now()}.bin`);
 
   try {
@@ -16,7 +16,15 @@ async function enviarRawWindows(buffer, printerName) {
     await fsPromises.writeFile(tempFile, buffer);
 
     // caminho da impressora (pode substituir os.hostname() por nome fixo)
-    const caminho = `\\\\${os.hostname()}\\${printerName}`;
+    if (!printer?.shareName) {
+      throw new Error(
+        "A impressora selecionada não possui compartilhamento configurado."
+      );
+    }
+
+    const caminho = `\\\\${os.hostname()}\\${printer.shareName}`;
+
+    console.log("Imprimindo em:", caminho);
 
     return new Promise((resolve, reject) => {
       const child = spawn("cmd.exe", ["/c", `copy /b "${tempFile}" "${caminho}"`], {
@@ -275,17 +283,75 @@ function gerarComandaESCPos(pedido, larguraMM = 80, numComanda) {
 /**
  * Imprime pedido ESC/POS
  */
-async function imprimirPedidoPedidoObj(pedido, larguraMM = 80, numComanda) {
-  const printerName = getImpressoraSalva();
-  if (!printerName) throw new Error("Nenhuma impressora configurada");
+async function imprimirPedidoPedidoObj(
+  pedido,
+  larguraMM = 80,
+  numComanda,
+  printerTeste = null
+) {
+
+  const printer =
+    printerTeste || getImpressoraSalva();
+    
+  if (!printer) throw new Error("Nenhuma impressora configurada");
 
   if (![80, 58].includes(Number(larguraMM))) larguraMM = 80;
 
   const buffer = gerarComandaESCPos(pedido, larguraMM, numComanda);
 
-  return enviarRawWindows(buffer, printerName);
+  return enviarRawWindows(buffer, printer);
+}
+
+function getConfigPath() {
+  return path.join(app.getPath("userData"), "printer.json");
+}
+
+function lerConfig() {
+  const p = getConfigPath();
+
+  if (!fs.existsSync(p)) return {};
+
+  try {
+    return JSON.parse(fs.readFileSync(p, "utf-8"));
+  } catch {
+    return {};
+  }
+}
+
+function salvarConfig(config) {
+  fs.writeFileSync(
+    getConfigPath(),
+    JSON.stringify(config, null, 2),
+    "utf-8"
+  );
+}
+
+function salvarImpressora(printer) {
+  const config = lerConfig();
+  config.printer = printer;
+  salvarConfig(config);
+}
+
+function getImpressoraSalva() {
+  const config = lerConfig();
+  return config.printer || null;
+}
+
+function salvarLargura(largura) {
+  const config = lerConfig();
+  config.largura = largura;
+  salvarConfig(config);
+}
+
+function getLarguraSalva() {
+  const config = lerConfig();
+  return config.largura || "80mm"; // default
 }
 
 module.exports = {
+  salvarImpressora,
+  getImpressoraSalva,
+  salvarLargura,
+  getLarguraSalva,
   imprimirPedidoPedidoObj,
 };
