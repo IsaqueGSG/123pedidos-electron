@@ -1,10 +1,11 @@
 const { ipcMain } = require("electron");
-const { 
+const {
   imprimirPedidoPedidoObj,
   salvarLargura,
   getLarguraSalva,
   salvarImpressora,
-  getImpressoraSalva
+  getImpressoraSalva,
+  verificarImpressoraCompartilhada
 } = require("../services/print.service");
 const { exec } = require("child_process");
 
@@ -87,6 +88,18 @@ ipcMain.handle(
     );
 
     return true;
+  }
+);
+
+ipcMain.handle(
+  "verificar-impressora-compartilhada",
+  async (_, printerName) => {
+    try {
+      const isShared = await verificarImpressoraCompartilhada(printerName);
+      return { success: true, isShared };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
   }
 );
 

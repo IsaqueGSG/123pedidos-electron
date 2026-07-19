@@ -1,5 +1,5 @@
 const { ipcMain } = require("electron");
-const { enviarWhats, getSocket, statusMap, logoutWhats } = require("../services/whatsapp.service");
+const { enviarWhats, getSocket, statusMap, logoutWhats, resetSocket } = require("../services/whatsapp.service");
 
 ipcMain.handle("whats-logout", async (_, idLoja) => {
   await logoutWhats(idLoja);
@@ -17,4 +17,9 @@ ipcMain.handle("whats-status", (_, idLoja) => {
 
 ipcMain.handle("whats-send", (_, payload) => {
   return enviarWhats(payload.idLoja, payload.telefone, payload.texto);
+});
+
+ipcMain.handle("whats-reset", async (_, idLoja) => {
+  await resetSocket(idLoja);
+  return { ok: true };
 });

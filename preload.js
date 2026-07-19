@@ -32,6 +32,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     });
   },
 
+  resetWhats: (idLoja) => ipcRenderer.invoke("whats-reset", idLoja),
+
   listPrinters: () =>
     ipcRenderer.invoke("printer-list"),
 
@@ -47,7 +49,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
 
   getLargura: () => ipcRenderer.invoke("getLargura"),
-  
+
   setLargura: (largura) => ipcRenderer.invoke("setLargura", largura),
 
   openExternal: (url) => shell.openExternal(url),
@@ -57,6 +59,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
       "printer-open-properties",
       printerName
     ),
+
+  verificarImpressoraCompartilhada: (printerName) => {
+    return ipcRenderer.invoke(
+      "verificar-impressora-compartilhada",
+      printerName
+    );
+  }
 
 });
 

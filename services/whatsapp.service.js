@@ -275,9 +275,46 @@ async function logoutWhats(idLoja) {
   enviarRenderer("whats-status", { idLoja, status: "disconnected" });
 }
 
+async function resetSocket(idLoja) {
+  log(idLoja, "Iniciando reset forçado da conexão...");
+
+  // 1. Tenta buscar e destruir o socket atual se ele existir
+  if (sockets.has(idLoja)) {
+    const sock = sockets.get(idLoja);
+    try {
+      // Tenta desconectar graciosamente
+      sock.end();
+    } catch (e) {
+      log(idLoja, "Erro ao tentar finalizar socket no reset:", e.message);
+    }
+    sockets.delete(idLoja);
+  }
+
+  // 2. Apaga a pasta de sessão no AppData
+  const dir = getAuthDir(idLoja);
+  if (fs.existsSync(dir)) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+      log(idLoja, "Pasta de sessão removida com sucesso.");
+    } catch (e) {
+      log(idLoja, "Erro ao remover pasta de sessão:", e.message);
+    }
+  }
+
+  // 3. Reseta estados
+  statusMap.set(idLoja, "disconnected");
+  enviarRenderer("whats-status", { idLoja, status: "disconnected" });
+  enviarRenderer("whats-qr", { idLoja, qr: null }); // Limpa o QR anterior
+
+  // 4. Força a criação de um novo
+  return await getSocket(idLoja);
+}
+
+// Exponha no module.exports
 module.exports = {
   getSocket,
   enviarWhats,
   statusMap,
-  logoutWhats
+  logoutWhats,
+  resetSocket // Adicione aqui
 };

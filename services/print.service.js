@@ -4,6 +4,8 @@ const path = require("path");
 const os = require("os");
 const { spawn } = require("child_process");
 const { app } = require("electron");
+const { exec } = require("child_process");
+
 
 /**
  * Envia buffer RAW para impressora compartilhada no Windows (CMD + copy /b)
@@ -348,10 +350,28 @@ function getLarguraSalva() {
   return config.largura || "80mm"; // default
 }
 
+// Função para verificar status real da impressora
+function verificarImpressoraCompartilhada(nomeImpressora) {
+  return new Promise((resolve) => {
+    // O comando abaixo lista as impressoras e seu status de compartilhamento
+    const command = `powershell "Get-Printer | Where-Object { $_.Name -eq '${nomeImpressora}' } | Select-Object -ExpandProperty Shared"`;
+    
+    exec(command, (error, stdout, stderr) => {
+      if (error || stderr) {
+        resolve(false); // Assume falso se houver erro na consulta
+        return;
+      }
+      // O PowerShell retorna 'True' ou 'False' (com quebras de linha)
+      resolve(stdout.trim().toLowerCase() === 'true');
+    });
+  });
+}
+
 module.exports = {
   salvarImpressora,
   getImpressoraSalva,
   salvarLargura,
   getLarguraSalva,
   imprimirPedidoPedidoObj,
+  verificarImpressoraCompartilhada
 };
