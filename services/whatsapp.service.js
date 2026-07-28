@@ -133,13 +133,17 @@ function attachEvents(sock, idLoja) {
         if (fs.existsSync(dir)) {
           fs.rmSync(dir, { recursive: true, force: true });
         }
+      } else {
+        // Tenta reconectar após 5 segundos para evitar loops de travamento
+        setTimeout(() => {
+          if (!sockets.has(idLoja) && !creating.has(idLoja)) {
+            getSocket(idLoja).catch(() => {
+              statusMap.set(idLoja, "error");
+              enviarRenderer("whats-status", { idLoja, status: "error" });
+            });
+          }
+        }, 5000);
       }
-
-      setTimeout(() => {
-        if (!sockets.has(idLoja) && !creating.has(idLoja)) {
-          getSocket(idLoja);
-        }
-      }, 2000);
     }
 
   });
