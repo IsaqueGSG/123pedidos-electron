@@ -336,6 +336,7 @@ function salvarImpressora(printer) {
 
 function getImpressoraSalva() {
   const config = lerConfig();
+  console.log("Impressora salva:", config);
   return config.printer || null;
 }
 

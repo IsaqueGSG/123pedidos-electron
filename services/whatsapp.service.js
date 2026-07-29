@@ -2,7 +2,8 @@ const {
   makeWASocket,
   useMultiFileAuthState,
   DisconnectReason,
-  fetchLatestBaileysVersion
+  fetchLatestBaileysVersion,
+  Browsers
 } = require("@whiskeysockets/baileys");
 const QRCode = require("qrcode");
 
@@ -43,15 +44,20 @@ async function criarSocket(idLoja) {
     log(idLoja, "Criando socket Baileys");
 
     const { state, saveCreds } = await useMultiFileAuthState(getAuthDir(idLoja));
-    const { version } = await fetchLatestBaileysVersion();
+    const latest = await fetchLatestBaileysVersion();
+
+    // console.log("latest:", latest);
+
+    const version = latest.version;
 
     const sock = makeWASocket({
       version,
       auth: state,
       logger: P({ level: "silent" }),
-      browser: ["Chrome", "Desktop", "123pedidos"],
+      browser: Browsers.windows("Chrome"),
       markOnlineOnConnect: false,
-      syncFullHistory: false
+      syncFullHistory: false,
+      printQRInTerminal: false
     });
 
     sock.ev.on("creds.update", saveCreds);
@@ -115,6 +121,7 @@ function attachEvents(sock, idLoja) {
 
     if (connection === "close") {
       const code = lastDisconnect?.error?.output?.statusCode;
+      console.log(lastDisconnect);
       const isLoggedOut = code === DisconnectReason.loggedOut;
 
       log(idLoja, "Conexão fechada. Código:", code);
