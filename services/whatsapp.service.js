@@ -287,37 +287,44 @@ async function logoutWhats(idLoja) {
 }
 
 async function resetSocket(idLoja) {
-  log(idLoja, "Iniciando reset forçado da conexão...");
+  log(idLoja, "Iniciando reset forçado da conexão e limpeza da pasta Baileys...");
 
-  // 1. Tenta buscar e destruir o socket atual se ele existir
+  // 1. Encerra e remove o socket da memória se existir
   if (sockets.has(idLoja)) {
     const sock = sockets.get(idLoja);
     try {
-      // Tenta desconectar graciosamente
-      sock.end();
+      sock.ev.removeAllListeners("connection.update");
+      sock.ev.removeAllListeners("creds.update");
+      sock?.end(undefined);
     } catch (e) {
-      log(idLoja, "Erro ao tentar finalizar socket no reset:", e.message);
+      log(idLoja, "Erro ao finalizar socket no reset:", e.message);
     }
     sockets.delete(idLoja);
   }
 
-  // 2. Apaga a pasta de sessão no AppData
+  // Remove também do mapa de criação se estiver travado
+  if (creating.has(idLoja)) {
+    creating.delete(idLoja);
+  }
+
+  // 2. Apaga rigorosamente a pasta de autenticação do Baileys para a idLoja
   const dir = getAuthDir(idLoja);
   if (fs.existsSync(dir)) {
     try {
       fs.rmSync(dir, { recursive: true, force: true });
-      log(idLoja, "Pasta de sessão removida com sucesso.");
+      log(idLoja, `Pasta de sessão apagada com sucesso: ${dir}`);
     } catch (e) {
-      log(idLoja, "Erro ao remover pasta de sessão:", e.message);
+      log(idLoja, "Erro ao remover a pasta de sessão do Baileys:", e.message);
     }
   }
 
-  // 3. Reseta estados
+  // 3. Reseta os mapas de status e limpa o QR Code no renderer
   statusMap.set(idLoja, "disconnected");
   enviarRenderer("whats-status", { idLoja, status: "disconnected" });
-  enviarRenderer("whats-qr", { idLoja, qr: null }); // Limpa o QR anterior
+  enviarRenderer("whats-qr", { idLoja, qr: null });
 
-  // 4. Força a criação de um novo
+  // 4. Aguarda um instante para liberar o sistema de arquivos e cria um novo socket limpo
+  await delay(1000);
   return await getSocket(idLoja);
 }
 
