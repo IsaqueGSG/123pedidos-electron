@@ -144,21 +144,22 @@ function gerarComandaESCPos(pedido, larguraMM = 80, numComanda) {
   // VOLTA PRA ESQUERDA
   conteudo += ESC + "a" + "\x00";
 
-  // === LINHA 1: NOME + #COMANDA ===
+  // === LINHA 1: #COMANDA (DESTACADA) + NOME (ABAIXO) ===
   const nome = t((pedido.cliente?.nome || "").toUpperCase());
   const numero = numComanda ? `#${numComanda}` : "";
 
-  // espaço disponível entre nome e número
-  const espaco = charsPorLinha - nome.length - numero.length;
+  if (numero) {
+    // Ativa o destaque (tamanho maior) para o número da comanda
+    conteudo += ESC + "a" + "\x01"; // Centralizado para o número
+    conteudo += GS + "!" + "\x11";  // Altura/largura dobrada
+    conteudo += numero + "\n";
+    conteudo += GS + "!" + "\x00";  // Volta ao tamanho normal
+  }
 
-  // evita quebrar se for muito grande
-  const linhaNomeNumero =
-    nome.length + numero.length >= charsPorLinha
-      ? nome + "\n" + numero
-      : nome + " ".repeat(Math.max(1, espaco)) + numero;
-
+  // Volta o alinhamento para a esquerda para o nome do cliente
+  conteudo += ESC + "a" + "\x00";
   conteudo += ESC + "E" + "\x01";
-  conteudo += quebrarLinha(linhaNomeNumero, charsPorLinha) + "\n";
+  conteudo += quebrarLinha(nome, charsPorLinha) + "\n";
   conteudo += ESC + "E" + "\x00";
 
   conteudo += quebrarLinha(t(pedido.cliente?.telefone || ""), charsPorLinha) + "\n";
@@ -276,7 +277,7 @@ function gerarComandaESCPos(pedido, larguraMM = 80, numComanda) {
   }
 
   // AVANÇO + CORTE
-  conteudo += "\n\n\n";
+  conteudo += "\n\n\n\n\n";
   conteudo += GS + "V" + "\x00";
 
   return Buffer.from(conteudo, "ascii");
@@ -294,7 +295,7 @@ async function imprimirPedidoPedidoObj(
 
   const printer =
     printerTeste || getImpressoraSalva();
-    
+
   if (!printer) throw new Error("Nenhuma impressora configurada");
 
   if (![80, 58].includes(Number(larguraMM))) larguraMM = 80;
@@ -356,7 +357,7 @@ function verificarImpressoraCompartilhada(nomeImpressora) {
   return new Promise((resolve) => {
     // O comando abaixo lista as impressoras e seu status de compartilhamento
     const command = `powershell "Get-Printer | Where-Object { $_.Name -eq '${nomeImpressora}' } | Select-Object -ExpandProperty Shared"`;
-    
+
     exec(command, (error, stdout, stderr) => {
       if (error || stderr) {
         resolve(false); // Assume falso se houver erro na consulta
