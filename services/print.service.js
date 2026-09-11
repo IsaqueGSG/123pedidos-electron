@@ -208,7 +208,7 @@ function gerarComandaESCPos(pedido, larguraMM = 80, numComanda) {
 
   Object.entries(itensPorCategoria).forEach(([categoria, itens]) => {
     conteudo += ESC + "E" + "\x01";
-    conteudo += t(categoria.toUpperCase()) + "\n";
+    conteudo += " + " + t(categoria.toUpperCase()) + "\n";
     conteudo += ESC + "E" + "\x00";
 
     itens.forEach((item) => {
@@ -251,6 +251,15 @@ function gerarComandaESCPos(pedido, larguraMM = 80, numComanda) {
   conteudo += `Total dos itens: R$ ${subTotalItens.toFixed(2)}\n`;
   conteudo += `Taxa de entrega: R$ ${(endereco.taxaEntrega ?? 0).toFixed(2)}\n`;
 
+  if (pedido?.desconto) {
+
+    if (pedido.desconto.tipo === "valor") {
+      conteudo += `Desconto: R$ ${Number(pedido.desconto.valor).toFixed(2)}\n`;
+    } else if (pedido.desconto.tipo === "porcentagem") {
+      conteudo += `Desconto: ${Number(pedido.desconto.valor).toFixed(2)}%\n`;
+    }
+  }
+  
   conteudo += divider;
 
   // TOTAL DESTACADO

@@ -15,6 +15,7 @@ function createMainWindow() {
   });
 
   if (!app.isPackaged) {
+    console.log("Running in development mode");
     win.loadURL("http://localhost:5173/login");
     win.webContents.session.clearCache().catch(() => {});
   } else {
