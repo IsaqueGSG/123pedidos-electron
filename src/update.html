@@ -51,26 +51,6 @@
       color: #94a3b8;
       margin-bottom: 16px;
     }
-    .progress-bar-container {
-      width: 80%;
-      height: 6px;
-      background: #1e293b;
-      border-radius: 3px;
-      margin: 0 auto;
-      overflow: hidden;
-    }
-    .progress-bar {
-      width: 0%;
-      height: 100%;
-      background: #3b82f6;
-      border-radius: 3px;
-      transition: width 0.3s ease;
-    }
-    .percentage {
-      font-size: 12px;
-      color: #64748b;
-      margin-top: 8px;
-    }
   </style>
 </head>
 <body>
@@ -78,10 +58,6 @@
     <div class="spinner"></div>
     <h2 id="title">Atualizando o sistema...</h2>
     <p id="subtitle">Baixando nova versão. Não feche o aplicativo.</p>
-    <div class="progress-bar-container">
-      <div id="progress" class="progress-bar"></div>
-    </div>
-    <div id="percentage" class="percentage">0%</div>
   </div>
 
   <script>
@@ -90,20 +66,13 @@
       window.electronAPI.onUpdateMessage((data) => {
         const titleEl = document.getElementById('title');
         const subtitleEl = document.getElementById('subtitle');
-        const progressEl = document.getElementById('progress');
-        const percentageEl = document.getElementById('percentage');
 
         if (data.status === 'downloading') {
           titleEl.innerText = "Baixando atualização...";
           subtitleEl.innerText = `Versão ${data.version || ''} encontrada`;
-          const percent = Math.round(data.percent || 0);
-          progressEl.style.width = percent + '%';
-          percentageEl.innerText = percent + '%';
         } else if (data.status === 'installing') {
           titleEl.innerText = "Instalando atualização...";
           subtitleEl.innerText = "O app será reiniciado em instantes.";
-          progressEl.style.width = '100%';
-          percentageEl.style.display = 'none';
           document.querySelector('.spinner').style.display = 'block';
         }
       });
